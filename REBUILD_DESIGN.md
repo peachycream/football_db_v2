@@ -94,7 +94,7 @@ identity_quarantine                   -- source ids that failed a check; reporte
 ### 3.2 Where mappings come from (strongest first)
 1. **source_native:** the source itself carries `gsis_id` (nflverse everything, Sleeper `players`, FTN on most skill/defensive ids).
 2. **id_map:** `ff_playerids` (DynastyProcess) for `mfl_id`/`pff_id`/`sleeper_id` → `gsis_id`. Known limitation: it is a *fantasy* map, with almost no offensive linemen (v1: 60 OL in 12,470 rows).
-3. **jersey_bridge:** `(season, team, jersey_number)` from PFF → nflverse rosters → `gsis_id`. It owes nothing to the name, so a name comparison against it is a genuine **negative** check (surname + first initial must agree). This is how v1 closed the OL gap. It is needed here from day one, because Team Offense's O-line grade depends on linemen.
+3. **jersey_bridge — DEMOTED 2026-09-26:** Phase 1 found nflverse `players.csv` carries `pff_id` natively for 98.7% of OL (0 shared ids), so this is now a fallback built only if Phase 4 resolution falls below 95%. Original rationale: `(season, team, jersey_number)` from PFF → nflverse rosters → `gsis_id`. It owes nothing to the name, so a name comparison against it is a genuine **negative** check (surname + first initial must agree). This is how v1 closed the OL gap. It is needed here from day one, because Team Offense's O-line grade depends on linemen.
 4. **manual:** `identity_overrides.csv` only. Every row carries a reason.
 
 **Never:** name-only matches, "the only candidate with that name", or fuzzy matching. A name may reject a candidate; it may never select one.

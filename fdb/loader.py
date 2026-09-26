@@ -30,6 +30,8 @@ class Scope:
 
     @property
     def label(self) -> str:
+        if self.season == 0:
+            return "all"
         if self.week is None:
             return f"season={self.season}"
         return f"season={self.season}/{self.season_type}/week={self.week}"
@@ -40,7 +42,7 @@ class Loader:
     source: str = ""
     endpoint: str = ""
     table: str = ""
-    grain: str = ""          # 'reference' | 'season' | 'week'
+    grain: str = ""          # 'snapshot' | 'reference' | 'season' | 'week'
     ext: str = "json"
 
     # --- to implement ------------------------------------------------------
@@ -105,6 +107,9 @@ def validate_source(loader: Loader, fields: list[str]) -> tuple[list[str], list[
 def scopes(conn: sqlite3.Connection, loader: Loader, seasons: list[int] | None = None) -> list[Scope]:
     """The framework's answer to "what may this loader load". `seasons` can only
     narrow it."""
+    if loader.grain == "snapshot":
+        # One whole-file scope; exists once its raw file does.
+        return [Scope(0)] if raw.latest(loader.source, loader.endpoint, loader.partition(Scope(0))) else []
     if loader.grain == "reference":
         rec = raw.latest(loader.source, loader.endpoint, loader.partition(Scope(0)))
         if rec is None:

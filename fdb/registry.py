@@ -38,3 +38,15 @@ def weekly_loaders() -> list[str]:
             seen.add(t["owner"])
             out.append(t["owner"])
     return out
+
+
+def owners(kind: str = "loader") -> list[str]:
+    """Owners in registry order. kind='loader' (default) or 'builder'; 'schema' is never returned."""
+    seen, out = set(), []
+    for t in load():
+        o = t["owner"]
+        if o == "schema" or o in seen or t.get("kind", "loader") != kind:
+            continue
+        seen.add(o)
+        out.append(o)
+    return out

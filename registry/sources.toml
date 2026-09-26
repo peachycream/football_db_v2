@@ -20,3 +20,41 @@ source = "nflverse release schedules/games.csv"
 grain = "game"
 seasons = "2016-"
 weekly = true
+
+[[table]]
+name = "core_nflverse_players"
+owner = "nflverse.players"
+source = "nflverse release players/players.csv"
+grain = "person"
+weekly = true
+
+[[table]]
+name = "core_rosters_weekly"
+owner = "nflverse.rosters_weekly"
+source = "nflverse release weekly_rosters/roster_weekly_<season>.csv"
+grain = "player-week"
+seasons = "2016-"
+weekly = true
+
+[[table]]
+name = "core_dp_playerids"
+owner = "dynastyprocess.playerids"
+source = "raw.githubusercontent.com/dynastyprocess/data/master/files/db_playerids.csv"
+grain = "person"
+weekly = true
+
+# Builders run after every loader, in this order, in rebuild and weekly.
+[[table]]
+name = "players"
+owner = "identity.build"
+kind = "builder"
+
+[[table]]
+name = "player_ids"
+owner = "identity.build"
+kind = "builder"
+
+[[table]]
+name = "identity_quarantine"
+owner = "identity.build"
+kind = "builder"

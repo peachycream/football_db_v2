@@ -1,7 +1,10 @@
 """Loader registry: id -> class. Table ownership lives in registry/sources.toml."""
+from .dp_playerids import DpPlayerIdsLoader
+from .nflverse_players import PlayersLoader
+from .nflverse_rosters_weekly import RostersWeeklyLoader
 from .nflverse_schedules import ScheduleLoader
 
-LOADERS = {cls.id: cls for cls in (ScheduleLoader,)}
+LOADERS = {cls.id: cls for cls in (ScheduleLoader, PlayersLoader, RostersWeeklyLoader, DpPlayerIdsLoader)}
 
 
 def get(loader_id: str):

@@ -75,7 +75,26 @@ def write(source: str, endpoint: str, partition: str, payload: bytes, ext: str,
         row_count=row_count, is_final=is_final, params=params,
     )
     Path(str(target) + ".meta.json").write_text(json.dumps(asdict(rec), indent=2, sort_keys=True))
+    prune(source, endpoint, partition)
     return rec
+
+
+KEEP_NON_FINAL = 3
+
+
+def prune(source: str, endpoint: str, partition: str) -> list[str]:
+    """Current-state feeds are re-fetched every run and never final, so superseded
+    snapshots would pile up (~15 MB a week). Keep the newest KEEP_NON_FINAL
+    non-final files per partition. A FINAL file is never deleted, and nothing is
+    ever modified in place."""
+    non_final = [r for r in records(source, endpoint, partition) if not r.is_final]
+    gone = []
+    for r in non_final[:-KEEP_NON_FINAL]:
+        p = r.full_path()
+        p.unlink(missing_ok=True)
+        Path(str(p) + ".meta.json").unlink(missing_ok=True)
+        gone.append(r.path)
+    return gone
 
 
 def _load_meta(p: Path) -> RawRecord:

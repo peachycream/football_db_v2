@@ -8,6 +8,7 @@ import time
 import traceback
 
 from . import alert, config, db, loader as fw, registry, schedule
+from .builders import BUILDERS
 from .loaders import get
 from .timeutil import parse_utc, utcnow
 
@@ -29,7 +30,7 @@ def run_loader(conn, lid: str) -> dict:
     ld = get(lid)
     t0 = time.time()
     detail = {"loader": lid, "fetched": 0, "cached": 0, "loaded": 0, "failures": []}
-    if ld.grain == "reference":
+    if ld.grain in ("reference", "snapshot"):
         target = [fw.Scope(0)]
     else:
         season = schedule.current_season(conn)
@@ -37,7 +38,7 @@ def run_loader(conn, lid: str) -> dict:
     for part in sorted({ld.partition(s) for s in target}):
         _, fetched = fw.fetch(conn, ld, part)
         detail["fetched" if fetched else "cached"] += 1
-    for sc in fw.scopes(conn, ld, None if ld.grain == "reference" else [schedule.current_season(conn)]):
+    for sc in fw.scopes(conn, ld, None if ld.grain in ("reference", "snapshot") else [schedule.current_season(conn)]):
         res = fw.load(conn, ld, sc, apply=True)
         if res["failures"]:
             detail["failures"].append(f"{sc.label}: " + "; ".join(res["failures"]))
@@ -73,6 +74,18 @@ def run() -> int:
         except Exception as e:
             step = {"loader": lid, "rc": 1, "failures": [f"{type(e).__name__}: {e}"],
                     "trace": traceback.format_exc()[-1500:]}
+        st["steps"].append(step)
+        _write_status(st)
+        rc = rc or step["rc"]
+
+    for bid in registry.owners("builder"):
+        t0 = time.time()
+        try:
+            res = BUILDERS[bid](conn)
+            step = {"loader": bid, "rc": 1 if res["failures"] else 0, "failures": res["failures"],
+                    "summary": res.get("summary"), "duration_s": round(time.time() - t0, 1)}
+        except Exception as e:
+            step = {"loader": bid, "rc": 1, "failures": [f"{type(e).__name__}: {e}"]}
         st["steps"].append(step)
         _write_status(st)
         rc = rc or step["rc"]

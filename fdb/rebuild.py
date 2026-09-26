@@ -8,6 +8,7 @@ import csv
 import os
 
 from . import config, db, http, loader as fw, raw, registry
+from .builders import BUILDERS
 from .loaders import get
 from .timeutil import stamp, utcnow
 
@@ -56,16 +57,6 @@ def _snapshot(path) -> str | None:
     return snap.name
 
 
-def owners_in_order() -> list[str]:
-    seen, out = set(), []
-    for t in registry.load():
-        o = t["owner"]
-        if o != "schema" and o not in seen:
-            seen.add(o)
-            out.append(o)
-    return out
-
-
 def build(target) -> tuple[bool, list[str], str]:
     """Build a fresh DB at `target` from raw only. -> (ok, report lines, content hash)"""
     if target.exists():
@@ -74,18 +65,26 @@ def build(target) -> tuple[bool, list[str], str]:
     report = [f"schema: {', '.join(db.apply_schema(conn))}"]
     fw.index_raw(conn, raw.records())
     ok = True
-    for lid in owners_in_order():
+    for lid in registry.owners("loader"):
         ld = get(lid)
-        n_ok, fails = 0, []
+        n_ok, fails, no_raw = 0, [], 0
         for sc in fw.scopes(conn, ld):
+            if raw.latest(ld.source, ld.endpoint, ld.partition(sc)) is None:
+                no_raw += 1  # never fetched: nothing to replay (reported, not an error)
+                continue
             res = fw.load(conn, ld, sc, apply=True)
             if res["failures"]:
                 fails.append(f"{sc.label}: {'; '.join(res['failures'])}")
             else:
                 n_ok += 1
-        report.append(f"{lid}: {n_ok} scopes loaded" + (f", {len(fails)} FAILED" if fails else ""))
+        report.append(f"{lid}: {n_ok} scopes loaded" + (f", {no_raw} with no raw file" if no_raw else "")
+                      + (f", {len(fails)} FAILED" if fails else ""))
         report.extend("  " + f for f in fails[:10])
         ok = ok and not fails
+    for bid in registry.owners("builder"):
+        res = BUILDERS[bid](conn)
+        report.append(f"{bid}: {res.get('summary', '')}" + (f" FAILED {res['failures']}" if res["failures"] else ""))
+        ok = ok and not res["failures"]
     h = db.content_hash(conn)
     conn.close()
     return ok, report, h

@@ -15,7 +15,7 @@ def _conn():
 
 def cmd_fetch(a):
     conn, ld = _conn(), get(a.loader)
-    parts = ["all"] if ld.grain == "reference" else sorted({ld.partition(s) for s in fw.scopes(conn, ld, a.season)})
+    parts = ["all"] if ld.grain in ("reference", "snapshot") else sorted({ld.partition(s) for s in fw.scopes(conn, ld, a.season)})
     for p in parts:
         rec, fetched = fw.fetch(conn, ld, p, refetch=a.refetch)
         print(f"{'fetched' if fetched else 'cached '} {rec.path} rows={rec.row_count} final={rec.is_final}")
@@ -63,6 +63,15 @@ def cmd_check(a):
     return rc
 
 
+def cmd_identity(a):
+    from . import identity
+    r = identity.build(_conn(), apply=a.apply)
+    print(json.dumps(r, indent=2))
+    if not a.apply:
+        print("(dry run: nothing written; pass --apply)")
+    return 1 if r["failures"] else 0
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="fdb")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -75,6 +84,9 @@ def main(argv=None):
         s.add_argument("--apply", action="store_true")
         s.add_argument("--refetch", action="store_true", help="ignore a usable cached raw file")
         s.set_defaults(fn=fn)
+    s = sub.add_parser("identity", help="rebuild players / player_ids / identity_quarantine")
+    s.add_argument("--apply", action="store_true")
+    s.set_defaults(fn=cmd_identity)
     s = sub.add_parser("weeks", help="completed weeks per the schedule")
     s.add_argument("--season", type=int)
     s.set_defaults(fn=cmd_weeks)

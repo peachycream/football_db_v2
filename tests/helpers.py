@@ -37,3 +37,11 @@ def seed_schedule_raw(text: str | None = None, is_final: bool = False):
     payload = (text if text is not None else (FIXTURES / "games_2025_2026.csv").read_text()).encode()
     n = payload.decode().count("\n") - 1
     return raw.write("nflverse", "schedules", "all", payload, "csv", {"fixture": True}, n, is_final)
+
+
+def seed_identity_raw():
+    """Players + DynastyProcess fixtures as raw snapshot files (rosters left unfetched)."""
+    from fdb import raw
+    for src, ep, f in (("nflverse", "players", "players_traps.csv"), ("dynastyprocess", "playerids", "dp_traps.csv")):
+        payload = (FIXTURES / f).read_bytes()
+        raw.write(src, ep, "all", payload, "csv", {"fixture": True}, payload.decode().count("\n") - 1, False)

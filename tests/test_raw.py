@@ -67,3 +67,13 @@ class CachePolicy(unittest.TestCase):
             fw.fetch(c, ld, "all"); fw.fetch(c, ld, "all")
             self.assertEqual(len(raw.records("fake", "feed", "all")), 2)
             self.assertEqual(c.execute("SELECT COUNT(*) FROM raw_fetch_log").fetchone()[0], 2)
+
+
+class Retention(unittest.TestCase):
+    def test_keeps_newest_three_non_final_and_every_final(self):
+        with TempEnv():
+            for i in range(5):
+                raw.write("fake", "feed", "all", b"x", "txt", {}, 1, is_final=(i == 0))
+            recs = raw.records("fake", "feed", "all")
+            self.assertEqual(sum(r.is_final for r in recs), 1)       # the final one survives
+            self.assertEqual(sum(not r.is_final for r in recs), 3)   # newest 3 non-final
