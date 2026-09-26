@@ -30,7 +30,7 @@ One section per phase. A cold session should be able to resume from the latest s
 - ✅ `{"x": []}`, `{"coverage_scheme": []}` treated as empty (unit test).
 - ✅ Idempotency: reloading 2026 from raw leaves the hash unchanged.
 - ✅ A dropped game fails the check and the season's previous rows survive (rollback test).
-- ⏳ **`--test-alert` seen in Discord — NOT verifiable here: `OPS_DISCORD_WEBHOOK` is unset.** All three failure paths verified. Needs Turon on Windows (below).
+- ⏳ **`--test-alert` seen in Discord — DEFERRED by Turon 2026-09-26.** All three failure paths verified. Until the webhook exists, every weekly run prints "NOBODY IS TOLD" and results live only in `PIPELINE_STATUS.json`. **Open item — carry it forward in every phase's log until closed.**
 
 **Found on the first real load — a check that failed on reality:** 2022 had **271** REG games, not 272. BUF @ CIN (week 17) was declared no-contest after Damar Hamlin's cardiac arrest. Recorded as a named exception (`CANCELLED_REG`) — **a check that fails on real data gets a named exception, never a looser tolerance.**
 
@@ -41,10 +41,12 @@ One section per phase. A cold session should be able to resume from the latest s
 - `gametime` is US Eastern. Converted with an explicit DST rule because Windows Python has no tz database without `tzdata`.
 - Team values are stored verbatim in core; `team_aliases` resolves them, and a value with no alias fails the load.
 
-**On Windows (Turon), once:**
+**On Windows (Turon), once** (step 1–2 deferred):
 1. Create a Discord webhook in a PRIVATE ops channel; add `OPS_DISCORD_WEBHOOK=<url>` to `.env`.
 2. `"C:\Users\k-ble\AppData\Local\Programs\Python\Python313\python.exe" -m fdb weekly --test-alert` → confirm the message arrives.
 3. `... -m fdb update nflverse.schedules --apply` then `... -m fdb rebuild` then `... -m unittest discover -s tests -t .`
 4. Task Scheduler: `weekly.bat`, Tuesday 05:00, StartWhenAvailable = True.
+
+**OPEN ITEMS:** (1) Discord webhook + `--test-alert` (deferred).
 
 **NEXT: Phase 1 — Identity** (spec §3, §8): `players` from nflverse rosters 2016–2026; `player_ids` from nflverse, Sleeper, `ff_playerids`, PFF jersey bridge; `identity_overrides.csv`; trap fixtures in §9. Phase 1 will need `pandas`/`pyarrow` if the roster assets are parquet-only — check for a CSV asset first.
