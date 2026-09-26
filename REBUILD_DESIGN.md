@@ -278,4 +278,4 @@ API budget note: Phase 4 is about 11 seasons × ~22 weeks × 8 facets ≈ **1,90
 **Still open:**
 4. **PFF read budget** for the 2016–2025 backfill (§8 note). Needed before Phase 4.
 
-**Next action:** start Phase 0 in a fresh session using `PHASE0_PROMPT.md`.
+**Next action:** see `REBUILD_LOG.md`.

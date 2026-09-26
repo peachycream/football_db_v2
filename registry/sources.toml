@@ -1,0 +1,22 @@
+# Source-ownership registry (REBUILD_DESIGN §4).
+# Every table has exactly ONE owner. The loader framework refuses to let a
+# loader write a table that is not registered to it.
+# `weekly = true` puts the owner in `fdb weekly`; order = run order.
+
+[[table]]
+name = "teams"
+owner = "schema"
+note = "reference data seeded in schema/002_teams.sql"
+
+[[table]]
+name = "team_aliases"
+owner = "schema"
+note = "every source spelling -> franchise"
+
+[[table]]
+name = "core_schedule"
+owner = "nflverse.schedules"
+source = "nflverse release schedules/games.csv"
+grain = "game"
+seasons = "2016-"
+weekly = true
