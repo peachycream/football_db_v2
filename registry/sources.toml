@@ -43,6 +43,62 @@ source = "raw.githubusercontent.com/dynastyprocess/data/master/files/db_playerid
 grain = "person"
 weekly = true
 
+[[table]]
+name = "core_player_stats"
+owner = "nflverse.player_stats"
+source = "stats_player/stats_player_week_<season>.csv"
+grain = "week"
+weekly = true
+
+[[table]]
+name = "core_snap_counts"
+owner = "nflverse.snap_counts"
+source = "snap_counts/snap_counts_<season>.csv"
+grain = "week"
+weekly = true
+
+[[table]]
+name = "core_pbp"
+owner = "nflverse.pbp"
+source = "pbp/play_by_play_<season>.csv.gz (117 columns)"
+grain = "week"
+weekly = true
+
+[[table]]
+name = "core_participation"
+owner = "nflverse.participation"
+source = "pbp_participation/pbp_participation_<season>.csv (2016-2025)"
+grain = "week"
+weekly = true
+
+[[table]]
+name = "core_ngs_passing"
+owner = "nflverse.ngs_passing"
+source = "nextgen_stats/ngs_passing.csv.gz"
+grain = "week"
+weekly = true
+
+[[table]]
+name = "core_ngs_receiving"
+owner = "nflverse.ngs_receiving"
+source = "nextgen_stats/ngs_receiving.csv.gz"
+grain = "week"
+weekly = true
+
+[[table]]
+name = "core_ngs_rushing"
+owner = "nflverse.ngs_rushing"
+source = "nextgen_stats/ngs_rushing.csv.gz"
+grain = "week"
+weekly = true
+
+[[table]]
+name = "core_ff_opportunity"
+owner = "ffverse.ff_opportunity"
+source = "ffverse/ffopportunity latest-data/ep_weekly_<season>.csv"
+grain = "week"
+weekly = true
+
 # Builders run after every loader, in this order, in rebuild and weekly.
 [[table]]
 name = "players"

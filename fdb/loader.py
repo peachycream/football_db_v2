@@ -44,6 +44,11 @@ class Loader:
     table: str = ""
     grain: str = ""          # 'snapshot' | 'reference' | 'season' | 'week'
     ext: str = "json"
+    season_range: tuple[int, int] | None = None   # e.g. (2016, 2025) when the source stops
+    warn_new_fields: bool = True                  # False when the table deliberately keeps a subset
+
+    def prepare(self, conn: sqlite3.Connection) -> None:
+        """Hook run at the start of every load (e.g. read the schedule for derive())."""
 
     # --- to implement ------------------------------------------------------
     def partition(self, scope: Scope) -> str: raise NotImplementedError
@@ -94,12 +99,14 @@ def index_raw(conn: sqlite3.Connection, recs: list[raw.RawRecord]) -> None:
 
 
 # ---------------------------------------------------------------- step 2 ----
-def validate_source(loader: Loader, fields: list[str]) -> tuple[list[str], list[str]]:
+def validate_source(loader: Loader, fields: list[str], table_cols: list[str] | None = None) -> tuple[list[str], list[str]]:
     """-> (missing, new). Missing fails the load; new is a warning. This is the
-    check v1 lacked when a copied mapping read a field the API never sent."""
+    check v1 lacked when a copied mapping read a field the API never sent.
+    `new` = source fields the table has no column for (i.e. silently not stored)."""
     expected = loader.expected_fields()
     missing = [f for f in expected if f not in fields]
-    new = [f for f in fields if f not in expected]
+    known = set(expected) | set(table_cols or [])
+    new = [f for f in fields if f not in known] if loader.warn_new_fields else []
     return missing, new
 
 
@@ -120,23 +127,32 @@ def scopes(conn: sqlite3.Connection, loader: Loader, seasons: list[int] | None =
         found = [s for s in schedule.seasons_loaded(conn) if s >= config.FIRST_SEASON]
     if seasons:
         found = [s for s in found if s in seasons]
+    if loader.season_range:
+        lo, hi = loader.season_range
+        found = [s for s in found if lo <= s <= hi]
     if loader.grain == "week":
         return [Scope(s, t, w) for s in found for (t, w) in schedule.completed_weeks(conn, s)]
     return [Scope(s) for s in found]
 
 
 # ------------------------------------------------------------ steps 3-4 ----
-def _cast(value, decl: str):
+def _cast(value, decl: str, col: str = ""):
     if value is None or value == "" or value == "NA":
         return None
     decl = (decl or "").upper()
     if "INT" in decl:
-        f = float(value)
+        try:
+            f = float(value)
+        except ValueError:
+            raise ValueError(f"non-numeric {value!r} for INTEGER column {col}") from None
         if not f.is_integer():
-            raise ValueError(f"non-integer {value!r} for INTEGER column")  # never truncate silently
+            raise ValueError(f"non-integer {value!r} for INTEGER column {col}")  # never truncate silently
         return int(f)
     if "REAL" in decl:
-        return float(value)
+        try:
+            return float(value)
+        except ValueError:
+            raise ValueError(f"non-numeric {value!r} for REAL column {col}") from None
     return str(value)
 
 
@@ -148,8 +164,14 @@ def load(conn: sqlite3.Connection, loader: Loader, scope: Scope, apply: bool = F
     rec = raw.latest(loader.source, loader.endpoint, loader.partition(scope))
     if rec is None:
         raise LoadRefused(f"no raw file for {loader.id} {scope.label}; run fetch first")
-    fields, rows = loader.parse(rec.read_bytes())
-    missing, new = validate_source(loader, fields)
+    loader.prepare(conn)
+    memo = getattr(loader, "_parsed", None)
+    if memo and memo[0] == (rec.path, rec.sha256):   # one season file serves ~22 week scopes
+        fields, rows = memo[1]
+    else:
+        fields, rows = loader.parse(rec.read_bytes())
+        loader._parsed = ((rec.path, rec.sha256), (fields, rows))
+    missing, new = validate_source(loader, fields, columns(conn, loader.table))
     result = {"loader": loader.id, "scope": scope.label, "raw": rec.path, "new_fields": new,
               "missing_fields": missing, "rows": 0, "failures": [], "applied": False}
     if missing:
@@ -172,9 +194,13 @@ def load(conn: sqlite3.Connection, loader: Loader, scope: Scope, apply: bool = F
         load_id = cur.lastrowid
         conn.execute(f"DELETE FROM {loader.table} WHERE {where}", params)
         sql = f"INSERT INTO {loader.table} ({', '.join(cols)}, load_id) VALUES ({', '.join('?' * (len(cols) + 1))})"
-        for r in rows:
-            full = {**r, **loader.derive(r)}
-            conn.execute(sql, [_cast(full.get(c), decl[c]) for c in cols] + [load_id])
+        try:
+            conn.executemany(sql, ([_cast(full.get(c), decl[c], c) for c in cols] + [load_id]
+                                   for full in ({**r, **loader.derive(r)} for r in rows)))
+        except (sqlite3.IntegrityError, ValueError) as e:  # duplicated key; a value that doesn't fit its type
+            conn.execute("ROLLBACK")
+            result["failures"].append(f"{type(e).__name__}: {e}")
+            return result
         n = conn.execute(f"SELECT COUNT(*) FROM {loader.table} WHERE {where}", params).fetchone()[0]
         result["rows"] = n
         if n != len(rows):

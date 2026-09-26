@@ -91,6 +91,13 @@ def run() -> int:
         rc = rc or step["rc"]
 
     season = schedule.current_season(conn)
+    if season:  # cross-source agreement on the live season: a silently wrong load shows up here
+        from . import reconcile
+        fails = [f"{name}: {val}" for name, val, ok in reconcile.run(conn, season) if not ok]
+        step = {"loader": "reconcile", "rc": 1 if fails else 0, "failures": fails}
+        st["steps"].append(step)
+        rc = rc or step["rc"]
+
     st.update(state="failed" if rc else "ok", finished_at=utcnow().isoformat(),
               current_season=season,
               completed_weeks=[f"{t}{w}" for t, w in schedule.completed_weeks(conn, season)] if season else [],

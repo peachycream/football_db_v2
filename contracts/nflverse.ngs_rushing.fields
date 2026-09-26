@@ -1,0 +1,24 @@
+# Required source fields, recorded from live 2016 + 2024 files 2026-09-26.
+# Missing = load fails. Columns in the source but not in the table are ignored.
+season
+season_type
+week
+player_display_name
+player_position
+team_abbr
+efficiency
+percent_attempts_gte_eight_defenders
+avg_time_to_los
+rush_attempts
+rush_yards
+avg_rush_yards
+rush_touchdowns
+player_gsis_id
+player_first_name
+player_last_name
+player_jersey_number
+player_short_name
+expected_rush_yards
+rush_yards_over_expected
+rush_yards_over_expected_per_att
+rush_pct_over_expected

@@ -1,0 +1,18 @@
+# Required source fields, recorded from live 2016 + 2024 files 2026-09-26.
+# Missing = load fails. Columns in the source but not in the table are ignored.
+game_id
+pfr_game_id
+season
+game_type
+week
+player
+pfr_player_id
+position
+team
+opponent
+offense_snaps
+offense_pct
+defense_snaps
+defense_pct
+st_snaps
+st_pct

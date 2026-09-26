@@ -1,0 +1,22 @@
+# Required source fields, recorded from live 2016 + 2024 files 2026-09-26.
+# Missing = load fails. Columns in the source but not in the table are ignored.
+nflverse_game_id
+old_game_id
+play_id
+possession_team
+offense_formation
+offense_personnel
+defenders_in_box
+defense_personnel
+number_of_pass_rushers
+players_on_play
+offense_players
+defense_players
+n_offense
+n_defense
+ngs_air_yards
+time_to_throw
+was_pressure
+route
+defense_man_zone_type
+defense_coverage_type

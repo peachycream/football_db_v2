@@ -72,6 +72,16 @@ def cmd_identity(a):
     return 1 if r["failures"] else 0
 
 
+def cmd_reconcile(a):
+    from . import reconcile
+    conn, rc = _conn(), 0
+    for season in a.season:
+        for name, val, ok in reconcile.run(conn, season):
+            print(f"{'ok  ' if ok else 'FAIL'} {name}: {val}")
+            rc = rc or not ok
+    return rc
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="fdb")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -87,6 +97,9 @@ def main(argv=None):
     s = sub.add_parser("identity", help="rebuild players / player_ids / identity_quarantine")
     s.add_argument("--apply", action="store_true")
     s.set_defaults(fn=cmd_identity)
+    s = sub.add_parser("reconcile", help="cross-source agreement checks")
+    s.add_argument("--season", type=int, nargs="+", required=True)
+    s.set_defaults(fn=cmd_reconcile)
     s = sub.add_parser("weeks", help="completed weeks per the schedule")
     s.add_argument("--season", type=int)
     s.set_defaults(fn=cmd_weeks)

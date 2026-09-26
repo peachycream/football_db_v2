@@ -3,8 +3,12 @@ from .dp_playerids import DpPlayerIdsLoader
 from .nflverse_players import PlayersLoader
 from .nflverse_rosters_weekly import RostersWeeklyLoader
 from .nflverse_schedules import ScheduleLoader
+from .nflverse_weekly import (FfOpportunityLoader, NgsPassingLoader, NgsReceivingLoader, NgsRushingLoader,
+                              ParticipationLoader, PbpLoader, PlayerStatsLoader, SnapCountsLoader)
 
-LOADERS = {cls.id: cls for cls in (ScheduleLoader, PlayersLoader, RostersWeeklyLoader, DpPlayerIdsLoader)}
+LOADERS = {cls.id: cls for cls in (ScheduleLoader, PlayersLoader, RostersWeeklyLoader, DpPlayerIdsLoader,
+                                   PlayerStatsLoader, SnapCountsLoader, PbpLoader, ParticipationLoader,
+                                   NgsPassingLoader, NgsReceivingLoader, NgsRushingLoader, FfOpportunityLoader)}
 
 
 def get(loader_id: str):
