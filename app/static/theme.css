@@ -1,0 +1,191 @@
+/* ===========================================================================
+   theme.css — single source of truth for football_db colour.
+   Linked by every shell: app.py, league_audit.page_shell, and mirrored into
+   frontend/tailwind.config.js for the React pages.
+
+   RULES (see PALETTE decisions, session 2026-08-29):
+   1. --accent is UI chrome ONLY. It is never a data value, so "interactive"
+      is never confused with "quarterback". Position hues are the data set.
+   2. WR / TE / RB hues are LOCKED to the shipped Aethersight legend
+      (app/trinity_viewer.py POS_COLOR). Changing them desyncs that tool.
+   3. Add new colour HERE, never as a literal in a blueprint.
+
+   EXEMPTIONS -- literals that are correct and must NOT be tokenised:
+   * Brand colours belonging to someone else. scouting.py holds 34 NFL team
+     values in NFL_COLORS (#A71930 Falcons, #0085CA Panthers ...) plus the
+     _color() fallback #3b82f6 for an unrecognised team, and the Discord
+     blurple #5865F2 / #4954d6 on the post button. They encode the NFL's and
+     Discord's identity, not ours. 38 literals in that file, all deliberate.
+   * Colours a JS library must receive as a real string. These now read from
+     /static/theme.js (TOKENS.get / .rgba / .pos), which resolves these very
+     custom properties at runtime -- so charts stay in step automatically and
+     no palette is duplicated. Any page whose scripts use TOKENS must load
+     theme.js; page_shell does it for all its pages.
+   * HTML numeric entities look like hex to a naive search: def_align.py
+     carries &#128214; (a book emoji), which is NOT the colour #128214.
+   * 8-digit hex carries alpha: scouting.py's panel gradient used #12172180.
+     Substituting the 6-char prefix would have produced "var(--surf-1)80".
+     Match 8-digit forms before 6-digit ones, or use color-mix().
+
+   Diverging ramp tokens (--div-*) are deliberately NOT defined yet — the
+   rose->green vs amber->cyan choice is still open. Add them in step B.
+   =========================================================================== */
+
+:root{
+  /* ── ground + surface ────────────────────────────────────────────────
+     Slightly blue-biased near-black, not pure #000, so it reads as chosen.
+     Replaces four competing grounds: #0a0c0f, #080c10, #0a0e1a, #0f1117. */
+  --bg-rgb: 10 14 26;
+  --bg: rgb(var(--bg-rgb));   /* page background, app-wide                    */
+  --surf-1-rgb: 15 20 32;
+  --surf-1: rgb(var(--surf-1-rgb));   /* cards, table bodies, panels                  */
+  --surf-2-rgb: 21 27 45;
+  --surf-2: rgb(var(--surf-2-rgb));   /* nav, table headers, row hover, alerts        */
+  --surf-3-rgb: 26 33 56;
+  --surf-3: rgb(var(--surf-3-rgb));   /* inputs, chips, secondary buttons             */
+  --edge-rgb: 31 39 64;
+  --edge: rgb(var(--edge-rgb));   /* borders, dividers                            */
+  --edge-soft-rgb: 22 29 51;
+  --edge-soft: rgb(var(--edge-soft-rgb));   /* interior rules (table rows)                  */
+
+  /* ── text ───────────────────────────────────────────────────────────
+     --tx-mut is the AA fix already recorded in tailwind.config.js:
+     was #4a5170 (~2.4:1, fails WCAG AA); #8a92ab computes to ~6:1. */
+  --tx-rgb: 232 236 245;
+  --tx: rgb(var(--tx-rgb));   /* body copy            ~14.8:1 on --bg         */
+  --tx-mut-rgb: 138 146 171;
+  --tx-mut: rgb(var(--tx-mut-rgb));   /* labels, captions     ~6:1                    */
+  --tx-dim-rgb: 107 115 145;
+  --tx-dim: rgb(var(--tx-dim-rgb));   /* de-emphasised meta                           */
+
+  /* ── accent — chrome only, one hue ──────────────────────────────────
+     Spring green: de-facto brand in 3 of 4 systems, and far enough from
+     the lime/amber end of the position ramp to never read as data. */
+  --accent-rgb: 0 229 160;
+  --accent: rgb(var(--accent-rgb));
+  --accent-dim-rgb: 0 143 100;
+  --accent-dim: rgb(var(--accent-dim-rgb));  /* hover/pressed, muted rules                   */
+  --accent-ink-rgb: 6 18 13;
+  --accent-ink: rgb(var(--accent-ink-rgb));  /* text ON an accent fill                       */
+
+  /* ── position — fixed data hues ─────────────────────────────────────
+     WR/TE/RB locked (rule 2). QB inherits the old app.py lime. */
+  --qb-rgb: 200 241 53;
+  --qb: rgb(var(--qb-rgb));
+  --rb-rgb: 192 38 211;
+  --rb: rgb(var(--rb-rgb));   /* LOCKED — Aethersight */
+  --wr-rgb: 34 211 238;
+  --wr: rgb(var(--wr-rgb));   /* LOCKED — Aethersight */
+  --te-rgb: 245 158 11;
+  --te: rgb(var(--te-rgb));   /* LOCKED — Aethersight */
+  --dl-rgb: 255 84 112;
+  --dl: rgb(var(--dl-rgb));
+  --lb-rgb: 122 162 255;
+  --lb: rgb(var(--lb-rgb));
+  --db-rgb: 167 139 250;
+  --db: rgb(var(--db-rgb));
+  /* Finer IDP shades. war_engine's roster-allocation bar splits DL into
+     DT/DE and DB into CB/S, so those four segments need to stay tellable
+     apart. Each is a lighter tint of its group hue above. */
+  --dt-rgb: 255 143 163;
+  --dt: rgb(var(--dt-rgb));   /* DL family */
+  --s-rgb: 196 181 253;
+  --s: rgb(var(--s-rgb));   /* DB family */
+
+  /* ── semantic — verdicts, deltas, alerts ────────────────────────────
+     Promoted from the one-offs already shipped in app/coverage.py
+     (.cov-FAVORABLE / .cov-NEUTRAL / .cov-TOUGH). */
+  --good-rgb: 0 229 160;
+  --good: rgb(var(--good-rgb));
+  --mid-rgb: 240 176 112;
+  --mid: rgb(var(--mid-rgb));
+  --bad-rgb: 255 84 112;
+  --bad: rgb(var(--bad-rgb));
+  /* Informational blue: links, grade B, the IDP-side accent. Shares its
+     value with --lb; they never compete as encodings on one surface. */
+  --info-rgb: 122 162 255;
+  --info: rgb(var(--info-rgb));
+
+  /* Diverging scale for over/under-expectation, deltas and rank movement.
+     Amber <-> cyan rather than the conventional red <-> green: these panels
+     get posted to Discord as PNGs (build_trinity_09_discord_v1.py), and
+     red/green is the worst possible pairing for deuteranopia. The sign
+     glyph (+/-) always carries the same information, so hue is
+     reinforcement and never the only channel.
+     These share values with --te and --wr on purpose: a signed NUMBER and a
+     position LABEL are different channels, and no cell is ever both. */
+  --div-neg-rgb: 245 158 11;
+  --div-neg: rgb(var(--div-neg-rgb));
+  --div-pos-rgb: 34 211 238;
+  --div-pos: rgb(var(--div-pos-rgb));
+
+  /* ── per-tool accent (chrome only) ──────────────────────────────────
+     FOUR family accents, not one per tool. Nineteen hues are not
+     discriminable, and the palette below is already committed to position
+     and semantic meanings -- inventing fifteen more would muddy those
+     rather than aid navigation. A family is enough to answer "where am I",
+     which is the whole job.
+     These alias hues used elsewhere. That is safe for the same reason the
+     diverging scale is: chrome and data never occupy the same element.
+     theme.py maps a route to one of these; set PER_APP_ACCENT = False
+     there to put the whole app back on a single accent. */
+  --app-explore-rgb: 0 229 160;
+  --app-explore: rgb(var(--app-explore-rgb));   /* SQL chat, scatter, dashboards   */
+  --app-league-rgb: 122 162 255;
+  --app-league: rgb(var(--app-league-rgb));   /* audit, scouting, ownership, draft, matchups */
+  --app-model-rgb: 167 139 250;
+  --app-model: rgb(var(--app-model-rgb));   /* projections, aethersight, coverage, def-align */
+  --app-ref-rgb: 240 176 112;
+  --app-ref: rgb(var(--app-ref-rgb));   /* glossary, ids, snaps, reader    */
+
+  /* ── categorical series (charts) ─────────────────────────────────────
+     For series that are NOT positions -- one line per team, personnel
+     groupings, role splits. Six hues, ordered for maximum separation, and
+     the accent is deliberately absent: a chart series must never be the
+     same colour as "this is interactive". They alias position hues, which
+     is safe wherever positions are not also encoded in the same chart --
+     check that before adding a seventh. */
+  --cat-1-rgb: 34 211 238;    --cat-1: rgb(var(--cat-1-rgb));
+  --cat-2-rgb: 245 158 11;    --cat-2: rgb(var(--cat-2-rgb));
+  --cat-3-rgb: 122 162 255;   --cat-3: rgb(var(--cat-3-rgb));
+  --cat-4-rgb: 255 84 112;    --cat-4: rgb(var(--cat-4-rgb));
+  --cat-5-rgb: 167 139 250;   --cat-5: rgb(var(--cat-5-rgb));
+  --cat-6-rgb: 200 241 53;    --cat-6: rgb(var(--cat-6-rgb));
+
+  /* ── league-format badges (chrome, not data) ────────────────────────*/
+  --tag-idp-rgb: 34 211 238;
+  --tag-idp: rgb(var(--tag-idp-rgb));
+  --tag-sf-rgb: 122 162 255;
+  --tag-sf: rgb(var(--tag-sf-rgb));
+  --tag-bb-rgb: 167 139 250;
+  --tag-bb: rgb(var(--tag-bb-rgb));
+  --tag-lu-rgb: 0 229 160;
+  --tag-lu: rgb(var(--tag-lu-rgb));
+
+  /* ── elevation ───────────────────────────────────────────────────────
+     On a dark ground depth reads from shadow plus a lighter surface, never
+     from a border alone. Three steps and no more: resting, raised, floating.
+     Shadows are pure black at low alpha so they work over any surface. */
+  --shadow-1: 0 1px 2px rgb(0 0 0 / .30);
+  --shadow-2: 0 6px 18px -4px rgb(0 0 0 / .55);
+  --shadow-3: 0 18px 44px -12px rgb(0 0 0 / .70);
+
+  /* ── focus ───────────────────────────────────────────────────────────
+     A two-stop ring: a gap in the page ground, then the accent. It stays
+     visible over any surface, and because it is the accent it follows the
+     per-tool family colour. Applied via :focus-visible so it appears for
+     keyboard users without firing on every mouse click. */
+  --ring: 0 0 0 2px rgb(var(--bg-rgb)), 0 0 0 4px rgb(var(--accent-rgb) / .8);
+
+  /* ── motion ──────────────────────────────────────────────────────────
+     Two durations. Anything slower reads as lag on a data tool. Every use
+     is disabled under prefers-reduced-motion. */
+  --dur-1: 110ms;
+  --dur-2: 200ms;
+  --ease: cubic-bezier(.2, .6, .3, 1);
+
+  /* ── type ───────────────────────────────────────────────────────────*/
+  --f-disp: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  --f-body: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --f-mono: 'DM Mono', 'Consolas', ui-monospace, monospace;
+}

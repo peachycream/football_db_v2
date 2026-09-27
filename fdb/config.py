@@ -19,3 +19,14 @@ GAME_HOURS = 4
 SETTLE_HOURS = 24
 # A weekly run still marked "running" after this long is reported as dead.
 STALE_RUN_HOURS = 6
+
+
+def env(name: str, default: str = "") -> str:
+    """A secret/setting from the environment, else from .env (gitignored). Never logged."""
+    val = os.environ.get(name, "")
+    if not val and ENV_PATH.exists():
+        for line in ENV_PATH.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = line.strip()
+            if line.startswith(f"{name}="):
+                val = line.split("=", 1)[1].strip().strip('"').strip("'")
+    return val or default

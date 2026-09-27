@@ -30,15 +30,19 @@ def run_loader(conn, lid: str) -> dict:
     ld = get(lid)
     t0 = time.time()
     detail = {"loader": lid, "fetched": 0, "cached": 0, "loaded": 0, "failures": []}
-    if ld.grain in ("reference", "snapshot"):
-        target = [fw.Scope(0)]
-    else:
-        season = schedule.current_season(conn)
-        target = fw.scopes(conn, ld, [season]) if season else []
-    for part in sorted({ld.partition(s) for s in target}):
-        _, fetched = fw.fetch(conn, ld, part)
+    season = schedule.current_season(conn)
+    seasons = None if ld.grain in ("reference", "snapshot") else ([season] if season else [])
+    for part in fw.fetch_partitions(conn, ld, seasons) if seasons != [] else []:
+        try:
+            _, fetched = fw.fetch(conn, ld, part)
+        except Exception as e:  # e.g. MFL 429: report it, keep going with the other partitions
+            detail["failures"].append(f"fetch {part}: {type(e).__name__}: {e}")
+            continue
         detail["fetched" if fetched else "cached"] += 1
-    for sc in fw.scopes(conn, ld, None if ld.grain in ("reference", "snapshot") else [schedule.current_season(conn)]):
+    for sc in fw.scopes(conn, ld, seasons) if seasons != [] else []:
+        if fw.raw_for(ld, sc) is None:
+            detail["failures"].append(f"{sc.label}: no raw file (fetch failed?)")
+            continue
         res = fw.load(conn, ld, sc, apply=True)
         if res["failures"]:
             detail["failures"].append(f"{sc.label}: " + "; ".join(res["failures"]))
@@ -46,6 +50,9 @@ def run_loader(conn, lid: str) -> dict:
             detail["loaded"] += 1
         if res["new_fields"]:
             detail.setdefault("warnings", []).append(f"new source fields: {res['new_fields']}")
+    dropped = fw.sync_snapshots(conn, ld)
+    if dropped:
+        detail["pruned_snapshot_rows"] = dropped
     detail["rc"] = 1 if detail["failures"] else 0
     detail["duration_s"] = round(time.time() - t0, 1)
     return detail

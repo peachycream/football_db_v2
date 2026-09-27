@@ -59,7 +59,7 @@ def _partition_dir(source: str, endpoint: str, partition: str) -> Path:
 
 
 def write(source: str, endpoint: str, partition: str, payload: bytes, ext: str,
-          params: dict, row_count: int, is_final: bool) -> RawRecord:
+          params: dict, row_count: int, is_final: bool, retention: str = "keep3") -> RawRecord:
     now = utcnow()
     d = _partition_dir(source, endpoint, partition)
     d.mkdir(parents=True, exist_ok=True)
@@ -75,21 +75,32 @@ def write(source: str, endpoint: str, partition: str, payload: bytes, ext: str,
         row_count=row_count, is_final=is_final, params=params,
     )
     Path(str(target) + ".meta.json").write_text(json.dumps(asdict(rec), indent=2, sort_keys=True))
-    prune(source, endpoint, partition)
+    prune(source, endpoint, partition, retention)
     return rec
 
 
 KEEP_NON_FINAL = 3
 
 
-def prune(source: str, endpoint: str, partition: str) -> list[str]:
+def prune(source: str, endpoint: str, partition: str, retention: str = "keep3") -> list[str]:
     """Current-state feeds are re-fetched every run and never final, so superseded
-    snapshots would pile up (~15 MB a week). Keep the newest KEEP_NON_FINAL
-    non-final files per partition. A FINAL file is never deleted, and nothing is
-    ever modified in place."""
+    snapshots would pile up (~15 MB a week). A FINAL file is never deleted, and
+    nothing is ever modified in place. Policies for NON-final files:
+      keep3  the newest KEEP_NON_FINAL per partition (feeds whose history is worthless)
+      daily  the newest file of each UTC day, every day kept (roster snapshots: the
+             history IS the data, and one per day bounds it at ~1.5 MB/day for 8 leagues)"""
     non_final = [r for r in records(source, endpoint, partition) if not r.is_final]
+    if retention == "daily":
+        newest = {}
+        for r in non_final:  # sorted by fetched_at, so the last one per day wins
+            newest[r.fetched_at[:10]] = r
+        doomed = [r for r in non_final if newest[r.fetched_at[:10]] is not r]
+    elif retention == "keep3":
+        doomed = non_final[:-KEEP_NON_FINAL]
+    else:
+        raise ValueError(f"unknown raw retention policy {retention!r}")
     gone = []
-    for r in non_final[:-KEEP_NON_FINAL]:
+    for r in doomed:
         p = r.full_path()
         p.unlink(missing_ok=True)
         Path(str(p) + ".meta.json").unlink(missing_ok=True)

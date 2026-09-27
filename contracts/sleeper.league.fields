@@ -1,0 +1,10 @@
+# Recorded from live responses 2026-09-26 (2 Sleeper leagues). A missing field fails the load.
+league_id
+name
+previous_league_id
+roster_positions
+scoring_settings
+season
+settings
+status
+total_rosters

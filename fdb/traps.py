@@ -25,6 +25,10 @@ ID_TRAPS = [
     ("mfl", "12459", None, "00-0031320", "DynastyProcess puts Kevin Smith's gsis on MFL 'Fred Williams'"),
     ("mfl", "12483", None, "00-0022888", "DynastyProcess puts DE Bobby McCray's gsis on punter Jake Schum"),
     ("mfl", "11361", None, "00-0028488", "DynastyProcess puts Mana Silva's gsis on 'Duke Williams'"),
+    # Phase 3: Sleeper /players/nfl swaps Conklin's and Ryan Izzo's gsis_ids; the name
+    # check refuses both claims (on real data 5133 -> Conklin via nflverse rosters).
+    ("sleeper", "5133", None, "00-0034439", "Tyler Conklin - Sleeper's own gsis_id is Ryan Izzo's"),
+    ("sleeper", "693", None, "00-0039167", "Joey Porter (b.1977) - Sleeper gives him Joey Porter Jr.'s rotowire_id"),
 ]
 
 # (gsis_id, column, expected, why)

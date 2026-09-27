@@ -1,4 +1,5 @@
 """Loader registry: id -> class. Table ownership lives in registry/sources.toml."""
+from . import mfl, sleeper
 from .dp_playerids import DpPlayerIdsLoader
 from .nflverse_players import PlayersLoader
 from .nflverse_rosters_weekly import RostersWeeklyLoader
@@ -8,7 +9,8 @@ from .nflverse_weekly import (FfOpportunityLoader, NgsPassingLoader, NgsReceivin
 
 LOADERS = {cls.id: cls for cls in (ScheduleLoader, PlayersLoader, RostersWeeklyLoader, DpPlayerIdsLoader,
                                    PlayerStatsLoader, SnapCountsLoader, PbpLoader, ParticipationLoader,
-                                   NgsPassingLoader, NgsReceivingLoader, NgsRushingLoader, FfOpportunityLoader)}
+                                   NgsPassingLoader, NgsReceivingLoader, NgsRushingLoader, FfOpportunityLoader,
+                                   *mfl.LOADERS, *sleeper.LOADERS)}
 
 
 def get(loader_id: str):

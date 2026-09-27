@@ -15,30 +15,42 @@ def _conn():
 
 def cmd_fetch(a):
     conn, ld = _conn(), get(a.loader)
-    parts = ["all"] if ld.grain in ("reference", "snapshot") else sorted({ld.partition(s) for s in fw.scopes(conn, ld, a.season)})
-    for p in parts:
-        rec, fetched = fw.fetch(conn, ld, p, refetch=a.refetch)
+    rc = 0
+    for p in fw.fetch_partitions(conn, ld, a.season):
+        try:
+            rec, fetched = fw.fetch(conn, ld, p, refetch=a.refetch)
+        except Exception as e:  # one refused partition (MFL 429) must not hide the others
+            print(f"FAILED  {ld.source}/{ld.endpoint}/{p}: {type(e).__name__}: {e}")
+            rc = 1
+            continue
         print(f"{'fetched' if fetched else 'cached '} {rec.path} rows={rec.row_count} final={rec.is_final}")
-    return 0
+    return rc
 
 
 def cmd_load(a):
     conn, ld = _conn(), get(a.loader)
     rc = 0
     for sc in fw.scopes(conn, ld, a.season):
+        if fw.raw_for(ld, sc) is None:
+            print(f"{sc.label}: no raw file (not fetched yet)")
+            rc = 1
+            continue
         res = fw.load(conn, ld, sc, apply=a.apply)
         state = "APPLIED" if res["applied"] else ("FAILED" if res["failures"] else "dry-run ok")
         print(f"{sc.label}: {state} rows={res['rows']}" + (f"  {res['failures']}" if res["failures"] else ""))
         if res["new_fields"]:
             print(f"  warning: new source fields {res['new_fields']}")
         rc = rc or bool(res["failures"])
+    if a.apply and fw.sync_snapshots(conn, ld):
+        print("removed core rows of snapshots whose raw file was pruned")
     if not a.apply:
         print("(dry run: nothing written; pass --apply)")
     return rc
 
 
 def cmd_update(a):
-    return cmd_fetch(a) or cmd_load(a)
+    rc = cmd_fetch(a)
+    return cmd_load(a) or rc  # load whatever was fetched, even if some partitions were refused
 
 
 def cmd_weeks(a):
@@ -83,6 +95,10 @@ def cmd_reconcile(a):
 
 
 def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["parity-ownership"]:  # its own parser: argparse REMAINDER drops leading --options
+        from . import parity
+        return parity.main(argv[1:])
     p = argparse.ArgumentParser(prog="fdb")
     sub = p.add_subparsers(dest="cmd", required=True)
     for name, fn, h in (("fetch", cmd_fetch, "fetch raw for a loader"),
@@ -106,6 +122,7 @@ def main(argv=None):
     s = sub.add_parser("check", help="idempotency: reload the latest scope and compare hashes")
     s.add_argument("--loader", nargs="*")
     s.set_defaults(fn=cmd_check)
+    sub.add_parser("parity-ownership", help="Phase 3 gate: /ownership/ owners vs the v1 oracle (see fdb/parity.py)")
     sub.add_parser("rebuild", help="rebuild the DB from data/raw with the network disabled").set_defaults(fn=lambda a: rebuild.run())
     s = sub.add_parser("weekly", help="the scheduled job")
     s.add_argument("--test-alert", action="store_true")

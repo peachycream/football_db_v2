@@ -1,5 +1,5 @@
 """Builders: derived tables rebuilt wholly from core tables. id -> callable(conn) -> report dict."""
-from . import identity
+from . import fantasy, identity
 
 
 def _identity(conn):
@@ -8,4 +8,4 @@ def _identity(conn):
     return r
 
 
-BUILDERS = {"identity.build": _identity}
+BUILDERS = {"identity.build": _identity, "fantasy.config": fantasy.build}

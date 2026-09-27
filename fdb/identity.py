@@ -6,9 +6,11 @@ it can never override a stronger one, and a disagreement is quarantined:
   1. nflverse players.csv         (source_native)  pff, pfr, espn, otc, nfl, esb, smart
   2. nflverse weekly rosters      (source_native)  sleeper, sportradar, yahoo, rotowire,
                                                    fantasy_data, and pff/pfr/espn fills
-  3. DynastyProcess db_playerids  (id_map)         mfl, and sleeper fills; every row
+  3. Sleeper /players/nfl         (source_native)  sleeper ids by Sleeper's own gsis_id;
+                                                   name-checked like DynastyProcess
+  4. DynastyProcess db_playerids  (id_map)         mfl, and sleeper fills; every row
                                                    must pass the negative name check
-  4. identity_overrides.csv       (manual)         last word, reason required
+  5. identity_overrides.csv       (manual)         last word, reason required
 
 Why 1 beats 2: nflverse's own 2016 weekly roster gives Damaris Johnson the
 pff/pfr ids of Dennis Johnson; players.csv has them right.
@@ -126,6 +128,67 @@ class Builder:
                 self.claim(src, sid, p["gsis_id"], "source_native", "nflverse weekly rosters", p["name"])
 
     # -- 3 -----------------------------------------------------------------
+    def from_sleeper(self):
+        """Sleeper's own gsis_id (source-native, Phase 3). Name-checked because a
+        source-native id is still typed by someone; shared gsis_ids are refused."""
+        rows = self.conn.execute("""SELECT player_id, TRIM(gsis_id) gsis, full_name, birth_date FROM core_sleeper_players
+                                    WHERE TRIM(COALESCE(gsis_id, '')) != ''""").fetchall()
+        by_gsis = defaultdict(list)
+        for r in rows:
+            by_gsis[r["gsis"]].append(r)
+        for g, rs in sorted(by_gsis.items()):
+            if len(rs) > 1:
+                for r in rs:
+                    self.refuse("sleeper", r["player_id"], g, r["full_name"], "sleeper players", f"gsis_id on {len(rs)} sleeper ids")
+                continue
+            r = rs[0]
+            person = self.people.get(g)
+            if person is None:
+                self.refuse("sleeper", r["player_id"], g, r["full_name"], "sleeper players", "claimed gsis_id is not a known player")
+            elif name_disagrees(r["full_name"], person) and not (
+                    surname_agrees(r["full_name"], person) and r["birth_date"] and r["birth_date"] == person["birth_date"]):
+                self.refuse("sleeper", r["player_id"], g, r["full_name"], "sleeper players",
+                            f"name disagrees with nflverse ({person['display_name']})")
+            else:
+                self.claim("sleeper", r["player_id"], g, "source_native", "sleeper players", r["full_name"])
+        self._sleeper_bridge()
+
+    SLEEPER_BRIDGE = ("sportradar", "rotowire", "fantasy_data", "espn", "yahoo")
+
+    def _sleeper_bridge(self):
+        """Sleeper players with NO gsis_id (new signings, 3 of 5 unresolved roster ids
+        on 2026-09-26): bridge through Sleeper's own cross ids to mappings nflverse
+        already made. Exact keys only; every available bridge must agree; name-checked.
+
+        One bridge alone is NOT enough: on first run Sleeper's rotowire_id put retired
+        Joey Porter (Sr.) on Joey Porter Jr.'s gsis, and espn/rotowire disagreed for 6
+        old players. So: >= 2 agreeing bridges, or 1 bridge + an exact birth date
+        (an independent biographical fact). Anything less is left unmapped, not guessed."""
+        cols = ", ".join(f"{s}_id" for s in self.SLEEPER_BRIDGE)
+        rows = self.conn.execute(f"""SELECT player_id, full_name, birth_date, {cols} FROM core_sleeper_players
+                                     WHERE TRIM(COALESCE(gsis_id, '')) = ''""").fetchall()
+        for r in rows:
+            if ("sleeper", r["player_id"]) in self.ids:
+                continue
+            hits = {src: self.ids[(src, str(r[f"{src}_id"]))][0] for src in self.SLEEPER_BRIDGE
+                    if r[f"{src}_id"] and (src, str(r[f"{src}_id"])) in self.ids}
+            if not hits:
+                continue
+            ev = "sleeper players " + "+".join(f"{s}_id" for s in sorted(hits))
+            if len(set(hits.values())) > 1:
+                self.refuse("sleeper", r["player_id"], None, r["full_name"], ev, f"bridges disagree: {hits}")
+                continue
+            g = next(iter(hits.values()))
+            person = self.people[g]
+            if len(hits) < 2 and not (r["birth_date"] and r["birth_date"] == person["birth_date"]):
+                continue  # insufficient evidence: unmapped (listed as unresolved if rostered)
+            if name_disagrees(r["full_name"], person) and not (
+                    surname_agrees(r["full_name"], person) and r["birth_date"] and r["birth_date"] == person["birth_date"]):
+                self.refuse("sleeper", r["player_id"], g, r["full_name"], ev, f"name disagrees with nflverse ({person['display_name']})")
+                continue
+            self.claim("sleeper", r["player_id"], g, "id_map", ev, r["full_name"])
+
+    # -- 4 -----------------------------------------------------------------
     def from_dp(self):
         rows = self.conn.execute("SELECT * FROM core_dp_playerids WHERE gsis_id IS NOT NULL").fetchall()
         passed = []
@@ -158,7 +221,7 @@ class Builder:
             if r["sleeper_id"] and ("sleeper", r["sleeper_id"]) not in self.ids:
                 self.claim("sleeper", r["sleeper_id"], g, "id_map", "dynastyprocess", r["name"])
 
-    # -- 4 -----------------------------------------------------------------
+    # -- 5 -----------------------------------------------------------------
     def from_overrides(self):
         if not OVERRIDES_PATH.exists():
             return
@@ -206,12 +269,18 @@ def checks(conn) -> list[str]:
     return fails
 
 
+def _has_table(conn, name) -> bool:
+    return conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (name,)).fetchone() is not None
+
+
 def build(conn, apply: bool = True) -> dict:
     b = Builder(conn)
     conn.execute("BEGIN")
     try:
         b.from_nflverse_players()
         b.from_rosters()
+        if _has_table(conn, "core_sleeper_players"):
+            b.from_sleeper()
         b.from_dp()
         b.from_overrides()
         b.write()

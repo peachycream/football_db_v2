@@ -57,6 +57,23 @@ def _snapshot(path) -> str | None:
     return snap.name
 
 
+def _swap_in(side, live) -> None:
+    """Replace the live DB with the side build. A file rename fails on Windows
+    while any process (the Flask app, an open shell) holds the live file open
+    (WinError 5, found on the first Windows run), so the pages are copied in with
+    SQLite's backup API instead: one locked, atomic write that open readers survive."""
+    if not live.exists():
+        os.replace(side, live)
+        return
+    src, dst = db.connect(side), db.connect(live)
+    try:
+        src.backup(dst)
+    finally:
+        src.close()
+        dst.close()
+    side.unlink()
+
+
 def build(target) -> tuple[bool, list[str], str]:
     """Build a fresh DB at `target` from raw only. -> (ok, report lines, content hash)"""
     if target.exists():
@@ -69,7 +86,7 @@ def build(target) -> tuple[bool, list[str], str]:
         ld = get(lid)
         n_ok, fails, no_raw = 0, [], 0
         for sc in fw.scopes(conn, ld):
-            if raw.latest(ld.source, ld.endpoint, ld.partition(sc)) is None:
+            if fw.raw_for(ld, sc) is None:
                 no_raw += 1  # never fetched: nothing to replay (reported, not an error)
                 continue
             res = fw.load(conn, ld, sc, apply=True)
@@ -109,7 +126,7 @@ def run() -> int:
     h = db.content_hash(conn)
     conn.close()
     snap = _snapshot(live)
-    os.replace(side, live)
+    _swap_in(side, live)
     print(f"app state exported {exported or 'none'}, imported {imported or 'none'}; snapshot {snap or 'none (no prior DB)'}")
     print(f"network calls during rebuild: {http.CALLS}")
     print(f"content hash: {h}")

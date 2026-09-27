@@ -6,19 +6,12 @@ Three behaviours, all deliberate (carried over from v1):
   * failure -> prints the exception only, never the URL (the token is the secret)
 A failed alert never fails the run."""
 import json
-import os
 
 from . import config, http
 
 
 def _webhook() -> str:
-    url = os.environ.get("OPS_DISCORD_WEBHOOK", "")
-    if not url and config.ENV_PATH.exists():
-        for line in config.ENV_PATH.read_text(encoding="utf-8", errors="replace").splitlines():
-            line = line.strip()
-            if line.startswith("OPS_DISCORD_WEBHOOK="):
-                url = line.split("=", 1)[1].strip().strip('"').strip("'")
-    return url
+    return config.env("OPS_DISCORD_WEBHOOK")
 
 
 def send(text: str) -> bool:

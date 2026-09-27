@@ -278,4 +278,4 @@ API budget note: Phase 4 is about 11 seasons × ~22 weeks × 8 facets ≈ **1,90
 **Still open:**
 4. **PFF read budget** for the 2016–2025 backfill (§8 note). Needed before Phase 4.
 
-**Next action:** see `REBUILD_LOG.md`.
+**Next action:** see `REBUILD_LOG.md`. (Phase 3 note: `my_franchises` is `config/my_franchises.toml`, TOML like the registry.)

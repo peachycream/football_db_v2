@@ -99,6 +99,92 @@ source = "ffverse/ffopportunity latest-data/ep_weekly_<season>.csv"
 grain = "week"
 weekly = true
 
+# --- Phase 3: fantasy platforms. Leagues/seasons in scope: config/my_franchises.toml.
+# mfl.league fetches TYPE=league once; divisions/conferences/franchises read that raw file.
+[[table]]
+name = "core_mfl_league"
+owner = "mfl.league"
+source = "MFL export TYPE=league (scalar settings)"
+grain = "league"
+weekly = true
+
+[[table]]
+name = "core_mfl_divisions"
+owner = "mfl.divisions"
+source = "MFL TYPE=league divisions.division (reads mfl.league's raw)"
+grain = "league"
+weekly = true
+
+[[table]]
+name = "core_mfl_conferences"
+owner = "mfl.conferences"
+source = "MFL TYPE=league conferences.conference (reads mfl.league's raw)"
+grain = "league"
+weekly = true
+
+[[table]]
+name = "core_mfl_franchises"
+owner = "mfl.franchises"
+source = "MFL TYPE=league franchises.franchise (reads mfl.league's raw); contact fields not stored"
+grain = "league"
+weekly = true
+
+[[table]]
+name = "core_mfl_rules"
+owner = "mfl.rules"
+source = "MFL export TYPE=rules, flattened, verbatim"
+grain = "league"
+weekly = true
+
+[[table]]
+name = "core_mfl_players"
+owner = "mfl.players"
+source = "MFL export TYPE=players&DETAILS=1, league-scoped"
+grain = "league"
+weekly = true
+
+[[table]]
+name = "core_mfl_rosters"
+owner = "mfl.rosters"
+source = "MFL export TYPE=rosters; one snapshot per UTC day kept"
+grain = "league_snapshot"
+weekly = true
+
+[[table]]
+name = "core_mfl_player_scores"
+owner = "mfl.player_scores"
+source = "MFL export TYPE=playerScores&W=<week> (reported points)"
+grain = "league_week"
+weekly = true
+
+[[table]]
+name = "core_sleeper_league"
+owner = "sleeper.league"
+source = "api.sleeper.app/v1/league/<id>"
+grain = "league"
+weekly = true
+
+[[table]]
+name = "core_sleeper_users"
+owner = "sleeper.users"
+source = "api.sleeper.app/v1/league/<id>/users"
+grain = "league"
+weekly = true
+
+[[table]]
+name = "core_sleeper_rosters"
+owner = "sleeper.rosters"
+source = "api.sleeper.app/v1/league/<id>/rosters; one snapshot per UTC day kept"
+grain = "league_snapshot"
+weekly = true
+
+[[table]]
+name = "core_sleeper_players"
+owner = "sleeper.players"
+source = "api.sleeper.app/v1/players/nfl (~15 MB)"
+grain = "snapshot"
+weekly = true
+
 # Builders run after every loader, in this order, in rebuild and weekly.
 [[table]]
 name = "players"
@@ -114,3 +200,21 @@ kind = "builder"
 name = "identity_quarantine"
 owner = "identity.build"
 kind = "builder"
+
+[[table]]
+name = "my_franchises"
+owner = "fantasy.config"
+kind = "builder"
+note = "config/my_franchises.toml as a table; also reports unresolved roster slots"
+
+# User-entered state: written only by the app (app/ownership.py). Exported to
+# app_state/*.csv and re-imported by `fdb rebuild`.
+[[table]]
+name = "app_wishlist"
+owner = "app.ownership"
+kind = "app"
+
+[[table]]
+name = "app_wishlist_priority"
+owner = "app.ownership"
+kind = "app"

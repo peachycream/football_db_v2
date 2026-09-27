@@ -1,0 +1,64 @@
+# Who am I in each league (REBUILD_DESIGN §4: replaces v1 gameday_config.json's
+# my_entry_id). Checked in; nothing secret here.
+#
+# `seasons` = the seasons v2 loads for that league. MFL league ids persist across
+# years; Sleeper rolls a dynasty league to a NEW id every season (previous_league_id),
+# so a Sleeper entry names one season's id.
+# `my_franchise` = MFL franchise id / Sleeper roster_id, as the source writes it.
+# Legacy leagues 19161 and 21991 are deliberately absent.
+
+[[league]]
+platform = "mfl"
+league_id = "30590"
+name = "TINO NFL Elite"
+my_franchise = "0021"
+seasons = [2025, 2026]
+
+[[league]]
+platform = "mfl"
+league_id = "57653"
+name = "TNT Devy"
+my_franchise = "0001"
+seasons = [2025, 2026]
+
+[[league]]
+platform = "mfl"
+league_id = "46276"
+name = "NFL Flex It Up"
+my_franchise = "0006"
+seasons = [2025, 2026]
+
+[[league]]
+platform = "mfl"
+league_id = "60398"
+name = "TINO March Madness"
+my_franchise = "0061"
+seasons = [2025, 2026]
+
+[[league]]
+platform = "mfl"
+league_id = "55757"
+name = "TWE"
+my_franchise = "0003"
+seasons = [2025, 2026]
+
+[[league]]
+platform = "mfl"
+league_id = "60856"
+name = "TINO NCAA"
+my_franchise = "0005"
+seasons = [2025, 2026]
+
+[[league]]
+platform = "sleeper"
+league_id = "1312225799826325504"
+name = "The Gamers Dynasty"
+my_franchise = "11"
+seasons = [2026]
+
+[[league]]
+platform = "sleeper"
+league_id = "1312262620807454720"
+name = "Fantasy Scouts Dynasty League"
+my_franchise = "2"
+seasons = [2026]

@@ -156,3 +156,69 @@ Plus: **one id per source per human** — enforced in `claim()` for every source
 **NEXT: Phase 3 — Fantasy + Ownership** (spec §8): MFL/Sleeper leagues, franchises, scoring rules, roster snapshots, reported scores; `app_*` wishlist tables + import from v1; port `/ownership/`. **Both APIs are blocked from the cloud container**, so Phase 3 must be run on Windows (or the environment's network policy widened — see the environment docs). Code can be written here against recorded sample payloads, but its gate (parity with v1 `/ownership/`, 0 dropped roster ids) needs the live APIs and the v1 DB.
 
 **2026-09-27:** Phase 3 handed to a LOCAL Windows session. MFL/Sleeper are still blocked from the cloud container, and the gate needs the v1 DB. Kickoff prompt: `PHASE3_PROMPT.md`. It also covers the first Windows run of the Phase 0–2 tests.
+
+---
+
+## Phase 3 — Fantasy + Ownership — GATE PASSED 2026-09-27 (Windows, local)
+
+**Where things are on this machine:** v2 = `C:\Users\k-ble\Desktop\Documents\GitHub\football_db_v2` (already a clone; no second clone made). **v1 oracle = `C:\Users\k-ble\Desktop\football_db`** (not `C:\Users\k-ble\football_db` as the kickoff prompt said), opened `mode=ro` only. `.env` holds only `MFL_USERNAME`/`MFL_PASSWORD` (gitignored; `git status` clean of it). `OPS_DISCORD_WEBHOOK` NOT copied: v1's `.env` has one, but whether it is the private ops channel is Turon's call.
+
+### Windows first run (step 0)
+- **44/44 Phase 0–2 tests: 1 failure on Windows**, fixed: `rebuild` swapped the DB with `os.replace`, which Windows refuses while any process holds the file open (WinError 5). Now `_swap_in` copies the side build in with SQLite's backup API (atomic, open readers survive — the Flask app can stay up during a rebuild).
+- Encoding: stdlib `open()` defaults to cp1252 on Windows; every new reader opens bytes or `encoding="utf-8"` (a Sleeper payload broke a probe that didn't). No timezone surprises.
+- Backfill 2016–2026 (`fdb weekly` only loads the current season, so the other seasons were `fdb update <loader> --apply`), then **`fdb reconcile --season 2024 2026`: all ok**.
+
+### Built
+| Piece | Where |
+|---|---|
+| League dimension | `Scope.league` / `Scope.snapshot`; grains `league`, `league_week`, `league_snapshot` (`fdb/loader.py`). Scopes = `config/my_franchises.toml` × schedule seasons × completed weeks — never the loader. Phase 0–2 grains unchanged |
+| Config | `config/my_franchises.toml` (TOML, like the registry; spec said yaml). 6 MFL + 2 Sleeper; MFL seasons 2025–2026, Sleeper 2026 (ids roll yearly) |
+| MFL client | `fdb/mfl.py`: POST login (password never in a URL), cookie auth, per-(league, year) host discovery, 1.1 s spacing, 429 backoff 5/15/45/135 s then a **5-min fail-fast cooldown**, error payloads raise (never stored), `as_list` for the one-element quirk |
+| Loaders (12) | `fdb/loaders/mfl.py`, `fdb/loaders/sleeper.py`; one `TYPE=league` fetch feeds 4 tables (`fetches = False` siblings read the same raw) |
+| Tables | `core_mfl_{league,franchises,divisions,conferences,rosters,rules,player_scores,players}`, `core_sleeper_{league,users,rosters,players}` (`schema/007`) |
+| Marts | `mart_roster_ownership`, `mart_roster_unresolved`, `mart_player_search`, `mart_wishlist(_priority)` (`schema/008`, `009`) |
+| Builder | `fantasy.config` → `my_franchises`; fails if my franchise is missing or **if the mart's slot count ≠ the latest snapshot's** (a join can't drop a slot silently) |
+| App | `app/` Flask: `/ownership/` search, suggest typeahead, FA browse, wishlist, reverse; JSON APIs. Reads `mart_*` only; writes `app_*` only. `theme.css`/`theme.js`/`theme.py` copied byte-identical (sha256 checked). Run: `python -m app` → :5001 |
+| User state | `app_wishlist`, `app_wishlist_priority` (gsis-keyed); `fdb/wishlist_import.py` |
+| Gate tool | `fdb parity-ownership --v1 <db> --explain` (`fdb/parity.py`) |
+| Tests | 66 (22 new in `tests/test_fantasy.py`), all offline |
+
+**Retention decision (roster snapshots):** raw policy `daily` = newest file per UTC day, every day kept (~1.5 MB/day for 8 leagues at most; ~80 MB/yr at the weekly cadence). Each retained raw file is its own `league_snapshot` scope, so history survives a delete-scope reload; `sync_snapshots` deletes core rows of pruned files so the table always equals a rebuild. Other current-state feeds keep 3.
+
+### Live source facts (each verified; several contradict the carried-over list)
+1. **APIKEY = the cookie is WRONG.** Sending the MFL_USER_ID token as `APIKEY` makes `TYPE=league` fail ("API Key Validation Failed"). Cookie only.
+2. **Pools are MFL's own settings, not config:** `playerLimitUnit` (CONFERENCE 30590; DIVISION 57653/60398/55757/60856; LEAGUE 46276) + `rostersPerPlayer` (55757 = 2). v1's hand-kept `fa_pool_scope` agrees. **Proven on every roster load:** no player has more owners in a pool than `rostersPerPlayer` (passes all 6).
+3. **Multi-conference rosters are NOT duplicated.** 30590 = 32 franchises × ~70 players = 2,230 rows; a player appears once per conference. "Elevated counts" were just big rosters.
+4. **MFL ids 0800–0999 are league-scoped custom (devy) players:** the same id is a different person (or "Placeholder, Devy") in each league. Keyed `mfl:<league>:<id>`; never mapped globally.
+5. **MFL reorders JSON keys and repeated elements on every call.** Rules are keyed on the rule itself (positions, event, range, points — unique in all 6 leagues), not payload position; nested JSON kept for later phases is canonicalised.
+6. **`playerScores&W=18` in a league with `endWeek` 17 returns WEEK 17's scores** (labelled 17). Scopes stop at each league's `endWeek`; a payload for another week is refused.
+7. **Rate limits are real:** after ~70 calls MFL 429'd `playerScores` through all backoffs, even at 4 s spacing, for ~10 minutes. `playerScores` now spaces 4 s; one refused partition no longer aborts the others (fetch/update/weekly).
+8. Franchise payloads carry league-mates' email/phone/address: **not stored in core** (stay in the local raw file only).
+9. Sleeper: `starters`/`taxi`/`reserve` ⊆ `players` (verified; a violation fails the load, since the id would vanish). Rosters change hands (roster 10: BigEWolf → EricKiesel).
+
+### Identity
+- **Sleeper `/players/nfl` added** below nflverse, above DynastyProcess, name-checked like DP: +1,199 ids. It caught **Sleeper swapping Tyler Conklin's and Ryan Izzo's gsis_ids** (both refused; trap added).
+- **Cross-id bridge** for Sleeper players with no gsis (new signings): needs ≥2 agreeing ids, or 1 + exact birth date. One bridge alone was wrong on first run (Joey Porter Sr. carries Jr.'s rotowire_id → trap added; espn/rotowire disagree for 6 old players). Resolves CJ Daniels, Matt Hibner, Jack Strand.
+- No MFL bridge needed: every NFL player on an MFL roster already resolves (via DynastyProcess).
+- Traps: 22 → 24. Identity: 26,515 players, 157,301 ids, 187 quarantined.
+
+### Darnold discrepancy (re-tested, not fixed)
+30590 2025 wk1 reported **20.9**. The stored 2025 rules, read catch-all, **reproduce it exactly**: 16 PC ×1 + 150 PY ×0.05 + 14 RY ×0.1 − 1 TSK = 23.9, − 3 FLO (1 lost sack fumble) = 20.9. v1's 7.60 was a v1 interpretation bug, not a rules/score disagreement. Threshold rules (`5/300`…) didn't trigger here; their meaning is still Phase 6's to pin down. Rules are identical 2025 vs 2026 in all 6 leagues.
+
+### Gate
+- ✅ **12 MFL/Sleeper loaders:** contracts recorded from live responses (`contracts/mfl.*`, `sleeper.*`); **all IDEMPOTENT** (`fdb check`); **all in `fdb weekly` → OK 27/27** (2 min).
+- ✅ **0 silently dropped roster ids.** 26,363 slots in the latest snapshots (mart = core, checked by the builder). Resolved 25,419. Unresolved **944, every one listed with its reason** in `mart_roster_unresolved`: **942 devy** (329 league-scoped MFL players, no NFL identity; CFB phase) + **2 NFL** (Sleeper: DeaMonte Trayanum 13438, Kaidon Salter 13681 — Sleeper has no gsis and no bridge meets the bar; left for an override with evidence, not guessed).
+- ✅ **/ownership/ vs v1, 50 players × 8 leagues = 400 answers: 301 identical; the other 99 all explained** — 176 franchise-level differences, each matched to a transaction or draft pick dated after v1's snapshot (v1 MFL snapshot 2026-08-05, Sleeper 2026-07-06): 97 free-agent adds/drops, 59 draft picks (60398's draft ran 08-01..08-19), 11 trades, 7 waivers, 1 commissioner. **0 unexplained; 0 v1-dropped slots.** Sleeper compared by roster (v1 team → roster by exact-id overlap). Devy is excluded from the sample by rule: v1 has no exact key for league-scoped ids (0 mfl ids in 0800–0999; it used name slugs). Evidence (transactions, draftResults) is in the raw store, not loaded.
+- ✅ **Wishlist imported: 7/7 v1 slugs re-keyed by exact keys, 0 unmapped** (6 by mfl/sleeper ids agreeing with v1's gsis; Doneiko Slaughter by v1 gsis + exact birth date). v1's priority table was empty. Exported to `app_state/*.csv` (checked in) and **survives rebuild** (unit test + both real rebuilds).
+- ✅ **`fdb rebuild` ×2 → identical `203e1294…9bb1`, 0 network calls**, ~4.5 min. ✅ **66 tests pass on Windows.**
+
+**Loaded:** MFL 12 league-seasons, 548 franchises, 1,230 rules, 25,481 roster slots (6 snapshots), 33,767 league players; scores 2026 wks 1–2 all leagues; **2025 PARTIAL** (30590 wks 1–17 + part of one more league). Sleeper 2 leagues, 882 slots, 12,229 players. Raw: MFL 31 MB, Sleeper 43 MB. DB 843 MB.
+
+**OPEN ITEMS:**
+1. Discord webhook (deferred; still NOBODY IS TOLD).
+2. **Finish the 2025 MFL scores** (Phase 6 calibration input): `python -m fdb update mfl.player_scores --season 2025 --apply`. Resumable; fetched weeks are final and cached. Stopped at ~23/102 pages under MFL's 429s.
+3. Trayanum / Salter: two Sleeper NFL players unresolved — an `identity_overrides.csv` row needs your evidence.
+4. PFF/FTN still need a first live run (Phases 4/5).
+5. Weekly makes ~40 MFL calls; if 429s persist on Tuesday runs, spread them (e.g. `mfl.players` less often).
+
+**NEXT: Phase 4 — PFF** (spec §8). Decision still open: PFF read budget (§10.4).

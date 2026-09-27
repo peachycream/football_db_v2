@@ -1,0 +1,12 @@
+# Recorded from live responses 2026-09-26 (players/nfl). A missing field fails the load.
+birth_date
+espn_id
+first_name
+full_name
+gsis_id
+last_name
+player_id
+position
+sportradar_id
+team
+yahoo_id

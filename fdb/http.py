@@ -22,6 +22,19 @@ def get(url: str, headers: dict | None = None, timeout: int = 120) -> bytes:
         return resp.read()
 
 
+def request(url: str, data: bytes | None = None, headers: dict | None = None,
+            timeout: int = 60) -> tuple[int, object, bytes]:
+    """-> (status, response headers, body). Raises urllib.error.HTTPError on 4xx/5xx.
+    For callers that need response headers (MFL login's Set-Cookie)."""
+    global CALLS
+    if not NETWORK_ENABLED:
+        raise NetworkDisabled(f"network call attempted while disabled: {url.split('?')[0]}")
+    CALLS += 1
+    req = urllib.request.Request(url, data=data, headers={"User-Agent": "football_db_v2", **(headers or {})})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return resp.status, resp.headers, resp.read()
+
+
 def post_json(url: str, body: bytes, timeout: int = 30) -> int:
     if not NETWORK_ENABLED:
         raise NetworkDisabled("network call attempted while disabled")
