@@ -154,3 +154,5 @@ Plus: **one id per source per human** — enforced in `claim()` for every source
 **OPEN ITEMS:** (1) Discord webhook (deferred). (2) Sleeper/MFL/PFF/FTN need a first live run on Windows.
 
 **NEXT: Phase 3 — Fantasy + Ownership** (spec §8): MFL/Sleeper leagues, franchises, scoring rules, roster snapshots, reported scores; `app_*` wishlist tables + import from v1; port `/ownership/`. **Both APIs are blocked from the cloud container**, so Phase 3 must be run on Windows (or the environment's network policy widened — see the environment docs). Code can be written here against recorded sample payloads, but its gate (parity with v1 `/ownership/`, 0 dropped roster ids) needs the live APIs and the v1 DB.
+
+**2026-09-27:** Phase 3 handed to a LOCAL Windows session. MFL/Sleeper are still blocked from the cloud container, and the gate needs the v1 DB. Kickoff prompt: `PHASE3_PROMPT.md`. It also covers the first Windows run of the Phase 0–2 tests.
