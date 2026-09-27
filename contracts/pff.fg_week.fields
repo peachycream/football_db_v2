@@ -1,0 +1,35 @@
+# Recorded from live PFF responses 2026-09-27 (2016 wk1 + 2025 wk1); fields in EVERY row. grades_* excluded:
+# PFF withholds a grade until it has graded it (e.g. early-season coverage). A missing field fails the load.
+declined_penalties
+draft_season
+eligible_season
+fifty_attempts
+fifty_made
+fifty_percent
+forty_attempts
+forty_made
+forty_percent
+franchise_id
+jersey_number
+one_attempts
+one_made
+one_percent
+pat_attempts
+pat_made
+pat_percent
+penalties
+player
+player_game_count
+player_id
+position
+team
+team_name
+thirty_attempts
+thirty_made
+thirty_percent
+total_attempts
+total_made
+total_percent
+twenty_attempts
+twenty_made
+twenty_percent

@@ -110,6 +110,7 @@ def fetch(conn: sqlite3.Connection, loader: Loader, partition: str, refetch: boo
         return cached, False
     if raw.cache_usable(cached) and not refetch:
         return cached, False
+    loader.prepare(conn)   # e.g. PFF maps schedule weeks to its own week numbers at fetch time
     payload, params = loader.fetch(partition)
     fields, rows = loader.parse(payload)
     count = 0 if raw.is_effectively_empty(rows) else len(rows)

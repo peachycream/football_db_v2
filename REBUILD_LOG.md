@@ -222,3 +222,46 @@ Plus: **one id per source per human** — enforced in `claim()` for every source
 5. Weekly makes ~40 MFL calls; if 429s persist on Tuesday runs, spread them (e.g. `mfl.players` less often).
 
 **NEXT: Phase 4 — PFF** (spec §8). Decision still open: PFF read budget (§10.4).
+
+---
+
+## Phase 4 — PFF — GATE PASSED 2026-09-27 (Windows, same session as Phase 3, by Turon's decision)
+
+**Decisions (Turon, 2026-09-27):** read budget — "keep going until I say stop"; scope — full 2016–2026, recent seasons first; credentials — `PFF_USER`/`PFF_PASS`/`PFF_API_KEY` copied from v1's `.env` (only those lines; only `PFF_API_KEY` is used — the other two are website credentials that do not work on the API). §10.4 is closed.
+
+### Built
+| Piece | Where |
+|---|---|
+| Client | `fdb/pff.py`: Bearer key, throttles on `x-ratelimit-remaining` (100 reads/min), retries 429/502/503/504, **raises on `restricted_columns`** and on error payloads, `rows_of` refuses a payload that isn't exactly one row list |
+| 7 weekly loaders | `fdb/loaders/pff.py` → `core_pff_{defense,fg,passing,rushing,receiving,blocking,coverage_scheme}_week`, one request per (season, week) |
+| 2 season loaders | `core_pff_offense_season`, `core_pff_defense_season`: `week=<completed REG weeks>,28,29,30,32` = PFF's server-aggregated REG+POST line with grades recomputed. **Split into two tables** (spec had one `core_pff_grades_season` fed by two endpoints; one owner per table) |
+| Schema | `schema/010_core_pff.sql`: every PFF field verbatim, types from live 2016 + 2025 responses (column sets identical in both eras). Framework columns `season, season_type, week` (schedule's) + `pff_week` (PFF's) |
+| Checks | per week: every scheduled team present (partial week refused), defensive plays per team 30–110, contract fields; per season: `player_game_count` ≤ weeks requested (preseason leak) |
+| Reconcile | `fdb/reconcile_pff.py`, run by `fdb reconcile` (and so by weekly on the live season) |
+| Tests | 79 (13 new in `tests/test_pff.py`), offline |
+
+**Week vocabulary (third one, mapped explicitly):** PFF playoffs are **28/29/30/32** (31 = Pro Bowl, empty; verified live). The schedule's POST weeks (18–21 ≤2020, 19–22 since) map onto them IN ORDER per season. 2020 has 17 REG weeks and a 14-team wild card (12 teams in wk 28) — both handled with no special case. Preseason never enters: no PFF week number reaches it.
+
+**Finality:** a PFF week is final only when its SEASON is closed (PFF re-grades after games; v1 saw 2025 grades revised months later). The live season's weeks are re-fetched every run: ~156 reads at season's end, ~2 min. Weekly run today: 2.6 min total, 36/36.
+
+### Found
+1. **My bug, caught by the run:** partition `2025/POST19` split as `POS`+`T19` → every playoff week of the first four 2025 loaders failed. Fixed (`_split`, round-trip test); the four were re-run. No bad rows were written — the load failed loudly.
+2. **PFF `upstream_timeout` (504)** on the heaviest call (2025 defense season grades, 22-week aggregation), six times running; succeeded on a later retry. Client now retries 502/504 with backoff.
+3. **The `offense/blocking` report lists a player only in weeks he had block snaps** (Chase Brown 12 of 17 games), so per-player sums compare to the season line only for linemen: 98.5–100% exact (2024 misses are all off by 1 snap).
+4. **nflverse/PFR gaps exposed by PFF (2026):** PFR has no week-1 row for Tariq Woolen (PHI, 70 PFF snaps) or Sebastian Joseph-Day (PIT, 18); and PFR counts one play per game that PFF does not for LV (every on-field defender +1, both weeks). The gate check attributes these by exact id instead of loosening its tolerance: PHI/PIT/LV are +0.00% once set aside, every one listed.
+5. "11 defenders per snap" is NOT an invariant (12-/10-man snaps are real): 529/570 team-weeks in 2024 — reported only.
+
+### Gate (all seasons 2016–2026: 187 checks, 0 FAIL)
+- ✅ **Defensive snaps PFF vs nflverse/PFR within 1% per team-season: every closed season 2016–2025 = 32/32 teams raw** (worst: NE 2018 −0.96%, CLE 2023 −0.75%, MIA 2025 +0.73%). 2026 (2 weeks): 29/32 raw, the 3 fully explained per player-game (item 4).
+- ✅ **REG+POST proven:** every PFF table holds exactly the schedule's completed weeks, PFF weeks only in 1–18/28–32; **weekly defensive snaps = PFF's own season line EXACTLY in all 11 seasons** (2024: 409,637 = v1's REG+POST truth; 2016: 394,417). If preseason leaked into either, those could not be equal.
+- ✅ **O-line:** all 32 teams have graded linemen every season; **6–8 distinct graded OL minimum per team-season, 303–350 OL-seasons per year.** The spec's "≥ 30 graded per team-season" cannot be meant per team (a team dresses 7–10 linemen); recorded as measured, not asserted — Turon to confirm the intended reading.
+- ✅ **PFF OL resolution: 100.00% in every closed season** (2026: 214/215, one new signing). **The jersey bridge (demoted in Phase 1) is not needed.** Defenders and receivers 100% 2016–2025.
+- ✅ Pass attempts vs nflverse: within ±1 league-wide every season (2024 18,580 = 18,580).
+- ✅ 9 loaders idempotent; in `fdb weekly` (36/36 OK). ✅ 79 tests pass.
+- ✅ **`fdb rebuild` ×2 → identical `391600f4…da1e`, 0 network calls**, ~7.5 min each (wishlist exported and re-imported both times).
+
+**Loaded 2016–2026:** defense 108,385 · blocking 100,617 · coverage scheme 70,870 · receiving 44,358 · rushing 22,954 · passing 6,758 · FG 5,529 player-weeks; season lines offense 11,819 / defense 11,176. ~1,800 PFF reads, no 429. Raw PFF 411 MB; DB 924 MB.
+
+**OPEN ITEMS:** (1) Discord webhook (deferred). (2) Trayanum/Salter Sleeper overrides (Phase 3). (3) Confirm the OL gate's intended reading. (4) Weekly MFL call volume (Phase 3 item 5).
+
+**NEXT: Phase 5 — FTN participation 2026 + seam** (spec §8).

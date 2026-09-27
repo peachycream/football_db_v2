@@ -1,0 +1,22 @@
+# Recorded from live PFF responses 2026-09-27 (2024 week=REG+POST list); fields in EVERY row. grades_* excluded:
+# PFF withholds a grade until it has graded it (e.g. early-season coverage). A missing field fails the load.
+declined_penalties
+draft_season
+eligible_season
+franchise_id
+jersey_number
+penalties
+player
+player_game_count
+player_id
+position
+snap_counts_pass
+snap_counts_pass_block
+snap_counts_pass_route
+snap_counts_run
+snap_counts_run_block
+snap_counts_total
+snap_counts_total_pass
+snap_counts_total_run
+team
+team_name

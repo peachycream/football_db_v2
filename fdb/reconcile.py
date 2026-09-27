@@ -70,4 +70,7 @@ def run(conn, season: int) -> list[tuple[str, str, bool]]:
     ]:
         n, ok = conn.execute(sql.replace("?1", "?"), (season,) * sql.count("?")).fetchone()
         out.append((f"{season} resolves: {label}", f"{ok}/{n} = {_pct(ok,n):.2f}%", n == 0 or ok / n >= 0.99))
+
+    from . import reconcile_pff  # Phase 4: only once PFF rows exist for the season
+    out.extend(reconcile_pff.run(conn, season))
     return out

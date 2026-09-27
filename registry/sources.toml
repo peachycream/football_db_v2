@@ -185,6 +185,82 @@ source = "api.sleeper.app/v1/players/nfl (~15 MB)"
 grain = "snapshot"
 weekly = true
 
+# --- Phase 4: PFF Developer API (api.pff.com, Bearer PFF_API_KEY). Weekly facets are
+# requested per (season, week) with PFF's week numbers (POST = 28/29/30/32). Grades use
+# the server-aggregated week-list call; the bare season call includes PRESEASON.
+
+[[table]]
+name = "core_pff_defense_week"
+owner = "pff.defense_week"
+source = "PFF facet/defense/summary week=N"
+grain = "week"
+seasons = "2016-"
+weekly = true
+
+[[table]]
+name = "core_pff_fg_week"
+owner = "pff.fg_week"
+source = "PFF facet/field_goal/summary week=N"
+grain = "week"
+seasons = "2016-"
+weekly = true
+
+[[table]]
+name = "core_pff_passing_week"
+owner = "pff.passing_week"
+source = "PFF facet/passing/summary week=N"
+grain = "week"
+seasons = "2016-"
+weekly = true
+
+[[table]]
+name = "core_pff_rushing_week"
+owner = "pff.rushing_week"
+source = "PFF facet/rushing/summary week=N"
+grain = "week"
+seasons = "2016-"
+weekly = true
+
+[[table]]
+name = "core_pff_receiving_week"
+owner = "pff.receiving_week"
+source = "PFF facet/receiving/summary week=N"
+grain = "week"
+seasons = "2016-"
+weekly = true
+
+[[table]]
+name = "core_pff_blocking_week"
+owner = "pff.blocking_week"
+source = "PFF facet/offense/blocking week=N"
+grain = "week"
+seasons = "2016-"
+weekly = true
+
+[[table]]
+name = "core_pff_coverage_scheme_week"
+owner = "pff.coverage_scheme_week"
+source = "PFF facet/defense/coverage_scheme week=N"
+grain = "week"
+seasons = "2016-"
+weekly = true
+
+[[table]]
+name = "core_pff_offense_season"
+owner = "pff.offense_season"
+source = "PFF facet/offense/summary week=<REG weeks>,28,29,30,32"
+grain = "season"
+seasons = "2016-"
+weekly = true
+
+[[table]]
+name = "core_pff_defense_season"
+owner = "pff.defense_season"
+source = "PFF facet/defense/summary week=<REG weeks>,28,29,30,32"
+grain = "season"
+seasons = "2016-"
+weekly = true
+
 # Builders run after every loader, in this order, in rebuild and weekly.
 [[table]]
 name = "players"

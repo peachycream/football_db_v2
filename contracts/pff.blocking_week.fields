@@ -1,0 +1,34 @@
+# Recorded from live PFF responses 2026-09-27 (2016 wk1 + 2025 wk1); fields in EVERY row. grades_* excluded:
+# PFF withholds a grade until it has graded it (e.g. early-season coverage). A missing field fails the load.
+block_percent
+declined_penalties
+draft_season
+eligible_season
+franchise_id
+hits_allowed
+hurries_allowed
+jersey_number
+non_spike_pass_block
+non_spike_pass_block_percentage
+pass_block_percent
+pbe
+penalties
+player
+player_game_count
+player_id
+position
+pressures_allowed
+sacks_allowed
+snap_counts_block
+snap_counts_ce
+snap_counts_lg
+snap_counts_lt
+snap_counts_offense
+snap_counts_pass_block
+snap_counts_pass_play
+snap_counts_rg
+snap_counts_rt
+snap_counts_run_block
+snap_counts_te
+team
+team_name
