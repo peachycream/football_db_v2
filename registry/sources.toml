@@ -261,6 +261,41 @@ grain = "season"
 seasons = "2016-"
 weekly = true
 
+# --- Phase 5: FTN Data (data.ftndata.com, Authorization: FTN_API_KEY). FTN ids are gsis_ids.
+# Rows are placed by FTN game (gid) through core_ftn_games. The nflverse/FTN participation
+# seam is mart_participation_personnel (builder participation.seam), not a shared table.
+[[table]]
+name = "core_ftn_games"
+owner = "ftn.games"
+source = "FTN /games/{season}"
+grain = "season"
+seasons = "2020-"
+weekly = true
+
+[[table]]
+name = "core_ftn_plays"
+owner = "ftn.plays"
+source = "FTN /games/{season}/plays (paginated, page cap 1000)"
+grain = "week"
+seasons = "2021-"
+weekly = true
+
+[[table]]
+name = "core_ftn_participation"
+owner = "ftn.participation"
+source = "FTN /games/{season}/participation"
+grain = "week"
+seasons = "2021-"
+weekly = true
+
+[[table]]
+name = "core_ftn_all22"
+owner = "ftn.all22"
+source = "FTN /all22/game/{gid}, one call per game"
+grain = "week"
+seasons = "2026-"
+weekly = true
+
 # Builders run after every loader, in this order, in rebuild and weekly.
 [[table]]
 name = "players"
@@ -276,6 +311,12 @@ kind = "builder"
 name = "identity_quarantine"
 owner = "identity.build"
 kind = "builder"
+
+[[table]]
+name = "mart_participation_personnel"
+owner = "participation.seam"
+kind = "builder"
+note = "nflverse participation <2026, FTN >=2026; source on every row (fdb/participation.py)"
 
 [[table]]
 name = "my_franchises"

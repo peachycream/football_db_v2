@@ -265,3 +265,43 @@ Plus: **one id per source per human** — enforced in `claim()` for every source
 **OPEN ITEMS:** (1) Discord webhook (deferred). (2) Trayanum/Salter Sleeper overrides (Phase 3). (3) Confirm the OL gate's intended reading. (4) Weekly MFL call volume (Phase 3 item 5).
 
 **NEXT: Phase 5 — FTN participation 2026 + seam** (spec §8).
+
+---
+
+## Phase 5 — FTN participation 2026 + seam — GATE PASSED 2026-09-27 (Windows, same session)
+
+**Credentials:** `FTN_USER`/`FTN_PASS`/`FTN_API_KEY` copied from v1's `.env` (only those lines, same as PFF). Only `FTN_API_KEY` (the "Legacy" key, raw in `Authorization`, no `Bearer`) is used.
+
+### Built
+| Piece | Where |
+|---|---|
+| Client | `fdb/ftn.py`: paginated season feeds; the raw payload is the pages exactly as received, wrapped in one JSON array |
+| Loaders (4) | `fdb/loaders/ftn.py` → `core_ftn_games` (2020–), `core_ftn_plays`, `core_ftn_participation` (2021–), `core_ftn_all22` (2026–, one call per game) |
+| Seam | **`mart_participation_personnel`** (builder `participation.seam`, `fdb/participation.py`): one row per offensive pass/run play, **nflverse < 2026, FTN ≥ 2026, `source` on every row** |
+| Schema | `schema/011_core_ftn.sql` (FTN names verbatim, types from live 2021/2025/2026), `012_mart_participation.sql` |
+| Checks | `fdb reconcile`: overlap seasons run the seam test; 2026 runs FTN-only plausibility + all-22 id resolution |
+| Tests | 85 (6 new in `tests/test_ftn.py`) |
+
+**Deviation from spec §4, deliberate:** the spec had FTN rows written into `core_participation` with a `source` column. That is two writers on one table (rule 2) and two vocabularies under one set of names (rule 3). Instead each source keeps its own core table, and **the seam is the mart**, which carries `source` per row, exactly as §4 wanted of the row.
+
+### Found (each is now a check, a test or a named exception)
+1. **FTN `/plays` caps a page at 1,000 whatever `count` says**, so "a short page is the last" returned **1,000 plays for a whole season**, silently. Pagination now advances by rows received; the end is a page shorter than the largest page seen, or a 404 "Season not found" after a full page (`/plays` answers 404 past the end, not `[]`).
+2. **FTN skill positions are ALIGNMENT, not personnel.** A tight end split wide is `WR`/`SLT`. By alignment, FTN showed 25% "10 personnel" vs nflverse's 0.5%, and every team-season failed the seam by up to 56 points. **Personnel is counted from each skill player's roster position by exact gsis id** (nflverse weekly roster that season, else `players`). The 2021 `TE` → 2022+ `Y-TE`/`H-TE` vocabulary change is therefore handled by construction; alignment codes stay verbatim in core.
+3. **Three personnel vocabularies:** nflverse 2016–22 `1 RB, 1 TE, 3 WR`; nflverse 2023+ `1 C, 1 FB, 2 G, 1 QB, 1 RB, 2 T, 1 TE, 2 WR` (FB split out, counted as a back); FTN via roster positions. A play whose 5 skill players aren't all backs/TEs/receivers (a 6th lineman reporting) is "unknown" on both sides alike, and counted.
+4. **FTN files the 2024 Super Bowl (gid 6733, played 2025-02-09) in its 2025 plays feed**, not 2024's. Every other Super Bowl is in its own feed, and `/participation` files this one correctly. Rows are placed by game through `core_ftn_games`, never by feed, and `FTN_PLAYS_FEED` names this one partition.
+5. **FTN typo:** 2022 wk8 SF @ LA kickoff (pid 983219) has `off='LAC'`. The plays check is now stricter than team coverage (every play's off/def must be the two teams of its own game), and that pid is a named erratum; the row itself is stored verbatim.
+6. **FTN lists the 2022 wk17 BUF @ CIN no-contest** (gid 6134, 0–0). The games check reuses the schedule's `CANCELLED_REG`, the same named exception.
+
+### Gate
+- ✅ **Personnel seam test 2021–2025 passes** (tolerances fixed before looking): every team-season within 5 pts on every group (11/12/21/13/10/22/other); worst TEN 2021 11 (2.2 pts), MIA 2025 10 (4.4 pts). League within 2 pts every season, e.g. 2024 11: 63.7% nflverse / 63.8% FTN; 12: 22.8 / 22.8.
+- ✅ **TE vocabulary handled** (finding 2). ⚠ **§9 trap REVISED — Turon to confirm:** the spec's "FTN 2021 11-personnel share in 25–45%" encodes v1's number, which v1 computed from alignment codes (v2's first run reproduced it: 34.3%). By roster position both sources say ~62% (nflverse 62.2, FTN 61.4). The trap's purpose, catching 2021 TEs miscounted, is kept as "FTN 2021 11-share within 2 pts of nflverse" (passes), and the old band is still reported.
+- ✅ **2026 FTN:** weeks 1–2 loaded, 3,731 personnel plays; 11/12/21 shares inside FTN's own 2021–2025 range; **all-22 ids 112,046/112,046 = 100% resolve**.
+- ✅ Every FTN week loads only when complete: every scheduled team present, every play's teams are its game's teams, participation covers ≥99% of scrimmage plays.
+- ✅ 4 loaders idempotent, all in `fdb weekly` (41/41 OK, 5.0 min). ✅ 85 tests pass.
+- ✅ **`fdb rebuild` ×2 → identical `f0622f16…fbfe`, 0 network calls**, ~10 min each (wishlist exported and re-imported both times).
+
+**Loaded:** FTN games 1,966 (2020–2026); plays 241,072 and participation 233,075 (2021–2026; 2021–2025 staged for the seam); all-22 5,094 plays (2026). Seam mart: 329,303 nflverse + 3,731 FTN plays. Raw FTN 395 MB.
+
+**OPEN ITEMS:** (1) Discord webhook. (2) Trayanum/Salter overrides. (3) OL gate reading (Phase 4). (4) **§9 FTN 2021 trap revision** (above). (5) **FTN play ↔ nflverse play link** (pid ↔ play_id) is not built: the seam mart is play-level per source, but joining FTN 2026 plays to `core_pbp` (EPA per personnel) needs it. Phase 6 builds it when the env marts need it, by exact keys (game + quarter + clock + down/distance/yardline).
+
+**NEXT: Phase 6 — Env + Matchups marts & apps** (spec §8).

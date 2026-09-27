@@ -73,4 +73,11 @@ def run(conn, season: int) -> list[tuple[str, str, bool]]:
 
     from . import reconcile_pff  # Phase 4: only once PFF rows exist for the season
     out.extend(reconcile_pff.run(conn, season))
+
+    from . import participation  # Phase 5: the nflverse/FTN participation seam
+    if conn.execute("SELECT 1 FROM core_ftn_participation WHERE season = ? LIMIT 1", (season,)).fetchone():
+        if season < participation.FTN_FROM:
+            out.extend(participation.seam_test(conn, seasons=(season,)))
+        else:
+            out.extend(participation.live_checks(conn, season))
     return out

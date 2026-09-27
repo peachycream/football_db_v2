@@ -1,0 +1,21 @@
+# Recorded from live FTN responses 2026-09-27 (2021 + 2025; all-22: 2026 gid 7019). A missing field fails the load.
+cond
+date
+day
+gid
+h
+hum
+ou
+ptsh
+ptsv
+seas
+sprv
+stad
+start_time
+surf
+temp
+updated
+v
+wdir
+week
+wspd
