@@ -212,11 +212,11 @@ Plus: **one id per source per human** — enforced in `claim()` for every source
 - ✅ **Wishlist imported: 7/7 v1 slugs re-keyed by exact keys, 0 unmapped** (6 by mfl/sleeper ids agreeing with v1's gsis; Doneiko Slaughter by v1 gsis + exact birth date). v1's priority table was empty. Exported to `app_state/*.csv` (checked in) and **survives rebuild** (unit test + both real rebuilds).
 - ✅ **`fdb rebuild` ×2 → identical `203e1294…9bb1`, 0 network calls**, ~4.5 min. ✅ **66 tests pass on Windows.**
 
-**Loaded:** MFL 12 league-seasons, 548 franchises, 1,230 rules, 25,481 roster slots (6 snapshots), 33,767 league players; scores 2026 wks 1–2 all leagues; **2025 PARTIAL** (30590 wks 1–17 + part of one more league). Sleeper 2 leagues, 882 slots, 12,229 players. Raw: MFL 31 MB, Sleeper 43 MB. DB 843 MB.
+**Loaded:** MFL 12 league-seasons, 548 franchises, 1,230 rules, 25,481 roster slots (6 snapshots), 33,767 league players; scores 2026 wks 1–2 all leagues; **2025 complete** (finished 2026-09-27: every league wk 1 to its endWeek — 30590/57653 wks 1–17, the other four 1–18; 114,504 rows). Sleeper 2 leagues, 882 slots, 12,229 players. Raw: MFL 31 MB, Sleeper 43 MB. DB 843 MB.
 
 **OPEN ITEMS:**
 1. Discord webhook (deferred; still NOBODY IS TOLD).
-2. **Finish the 2025 MFL scores** (Phase 6 calibration input): `python -m fdb update mfl.player_scores --season 2025 --apply`. Resumable; fetched weeks are final and cached. Stopped at ~23/102 pages under MFL's 429s.
+2. ~~Finish the 2025 MFL scores~~ — DONE 2026-09-27 in one pass (no 429s once MFL's limit had reset).
 3. Trayanum / Salter: two Sleeper NFL players unresolved — an `identity_overrides.csv` row needs your evidence.
 4. PFF/FTN still need a first live run (Phases 4/5).
 5. Weekly makes ~40 MFL calls; if 429s persist on Tuesday runs, spread them (e.g. `mfl.players` less often).
