@@ -305,3 +305,44 @@ Plus: **one id per source per human** — enforced in `claim()` for every source
 **OPEN ITEMS:** (1) Discord webhook. (2) Trayanum/Salter overrides. (3) OL gate reading (Phase 4). (4) **§9 FTN 2021 trap revision** (above). (5) **FTN play ↔ nflverse play link** (pid ↔ play_id) is not built: the seam mart is play-level per source, but joining FTN 2026 plays to `core_pbp` (EPA per personnel) needs it. Phase 6 builds it when the env marts need it, by exact keys (game + quarter + clock + down/distance/yardline).
 
 **NEXT: Phase 6 — Env + Matchups marts & apps** (spec §8).
+
+## Phase 6 — Env + Matchups marts & apps — GATE MET 2026-09-27, pending Turon's review (Windows, same session)
+
+### Built
+| Piece | Where |
+|---|---|
+| pbp columns | `schema/013_pbp_env_columns.sql`: `fixed_drive_result`, `drive_play_count`, `tackled_for_loss`, `fumble_forced` (contract updated; pbp reloaded from raw) |
+| Loader | `nflverse.ftn_charting` → `core_nflverse_ftn_charting` (2022–; `schema/014`): play-action / screen / no-huddle / rushers, **and both play ids (nflverse + FTN)**. This closes Phase 5 open item 5: the FTN↔pbp play link is the source's own key, not a clock/down match |
+| Matchups marts | `schema/015_mart_matchups.sql`: `mart_team_week_opponent`, `mart_player_allowed_week` (off from `core_player_stats`, IDP from PFF defense, PK from PFF FG), `mart_mfl_rules`, `mart_mfl_reported_week` (mfl→gsis→pff, exact ids), `mart_mfl_leagues` |
+| Scoring | `fdb/scoring.py`: MFL rules at read time, per player-game; `idp_calibration` (v1's method) |
+| Env marts | builder `env.build` (`fdb/env.py`) → `mart_team_off_env_week` (split grain), `mart_team_def_env_week`, `mart_team_def_scheme_week`, **sums only**; PFF season views in `schema/016_mart_env.sql`. Formulas are v1's (agent_offense_env_weekly_v1 / build_def_env_weekly) |
+| Apps | `app/matchups.py` (`/api/matchups/meta|rankings|trends`), `app/env.py` (`/api/team-offense-env`, `/api/team-defense-env`, `/gameday`), **v1 JSON contracts unchanged**; `app/viz.py` serves v1's built React bundle (copied to `app/static/viz`) at `/viz/offense`, `/viz/defense`, `/viz/matchups`, `/matchups/`, injecting `window.__SEASON_CTX__` from the marts. Unported v1 pages/APIs (scatter, player, chat panels, `/gameday/live` widget) are not routed |
+| Tests | 104 (19 new in `tests/test_phase6.py`) |
+
+### Found
+1. **⚠ Turon: MFL scoring rules are ADDITIVE, measured.** For a player at position P every rule naming P applies, the catch-all row and narrower rows together (30590 2025 wk1–3 exact-to-0.01: TE 175/217 additive vs 7/217 widest-only). This *refines* the settled catch-all rule: a narrow row adds, it does not override. An event with only narrow rows (RA: RB/WR/TE) never scores for a QB. Increment rules (`5/300`) truncate and are never negative. Offense exactness vs MFL-reported: 98.6–99.4% in all 6 leagues. v1's rules table (UNIQUE on league/positions/event/range) collapsed multi-row ladders, so league-mode rankings differ from v1 **by design**.
+2. **Offensive players' special-teams tackles score** (TK/AS catch-all rows name QB/RB/WR/TE): offense mart rows carry nflverse `def_tackles_solo`/`def_tackle_assists`; generic PPR excludes them.
+3. **2026 4-man pressure has no source:** nflverse's FTN mirror has `n_pass_rushers` but no pressure flag. It stays NULL (never 0) and the page shows "—".
+
+### Gate — rankings vs v1 (live localhost:5000), 2024–2025, all 32 teams, every metric diffed
+**Matchups (PPR, full season):** IDP DE/LB identical; DT/CB/S/PK near-identical; offense ρ 0.94–0.99. Every gap traced to measured v1 defects: name-slug duplicate player rows (374 in 2024, 268 in 2025, e.g. Chris Olave also filed as `cole_chris`), current-vs-weekly position, 517 mis-stamped v1 gsis rows (2025), 98 two-point conversions v1 lacks. Stat lines agree 18,152/18,250; collapsing v1's duplicates + weekly position cuts the max team diff from 71 to 9.7 FP/season.
+
+**Team Offense / Team Defense league tables:** Spearman ρ ≥ 0.997 on every ranked column (EPA, PROE, pace, success; EPA allowed, success allowed, havoc, pts/drive); most columns identical rank for all 32 teams. Every difference, explained:
+| Difference | Size | Cause |
+|---|---|---|
+| ±1 play for a few teams; single-week trend points | ≤0.005 EPA/play season | **nflverse revised pbp after v1's cache (2026-07-09)**: e.g. 2024_15_MIA_HOU 2274 (HOU fake punt) and 2025_02_SEA_PIT 3686 → `no_play`; 2025_13_JAX_TEN 933 added. MIA's one-play defensive diff is the same fake punt |
+| Personnel splits | large (SF 2025 21-share: v1 0.2%, v2 37%) | **v1 bug**: 2023+ strings split out FB and v1 read only `RB`. v2 = nflverse's own `offense_personnel` string on **every** counted play (verified SF/MIN/BAL 2024–25) |
+| Target share by position | up to 10 pts | **v1 duplicate rows**: TEN 2024 v1 575 targets vs pbp 510; v2's buckets sum to exactly 510. (JAX 2025: Travis Hunter's targets are `other` because nflverse lists him CB; v1's current position said WR) |
+| Pass-block grade (BUF, PIT, NYJ, MIA, CHI, TEN) | up to 1.2 | **v1 name matching**: the two Connor McGoverns (NYJ pff 10778, BUF pff 41714) and Zach Frazier (PIT) are missing from v1's `pff_offense_blocking`; v2 keys on the PFF id (both McGoverns are already identity traps) |
+| PFF defense grades | ≤0.28 | same class: every differing team-season has 1–2 player rows missing in v1's slug-keyed `pff_grades`, never extra |
+| Scheme | 2025 | v1 has no 2025 scheme data (returns null); v2's `through_season` is 2025 |
+| Week range mid-season | — | the bundle asks for weeks 1–18; v2 clamps to the last week with data (v1 echoed 1–18 and listed unplayed weeks as "personnel missing") |
+
+- ✅ Pages verified in the browser (2026 opens by default; all three render on v2 data).
+- ✅ `nflverse.ftn_charting` idempotent; `env.build` re-run → identical row hashes (72,618 / 5,586 / 11,108 rows, ~4 min).
+- ✅ `fdb weekly`: every step OK including `nflverse.ftn_charting` and `env.build`.
+- ✅ **`fdb rebuild` ×2 → identical `384c218e…9bbe2`, 0 network calls**, ~16 min each (wishlist exported and re-imported both times). ✅ 104 tests pass.
+
+**OPEN ITEMS:** (1) Discord webhook. (2) Trayanum/Salter overrides. (3) OL gate reading (Phase 4). (4) §9 FTN 2021 trap revision (Phase 5). (5) Sleeper scoring deferred (§10.3), so Sleeper leagues are not offered in Matchups. (6) `env.build` is the slowest builder (~4 min, all seasons every run); scope it to changed seasons if weekly time matters. (7) v1 Game Day widget and chat panels not ported.
+
+**NEXT: Phase 7a — Player Dashboard** (spec §8).

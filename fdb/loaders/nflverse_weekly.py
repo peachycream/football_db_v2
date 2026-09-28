@@ -69,7 +69,7 @@ class PbpLoader(WeekCsvLoader):
     url_template = NV + "/pbp/play_by_play_{season}.csv.gz"
     ext = "csv.gz"
     team_col = "posteam"
-    warn_new_fields = False  # 117 of ~372 columns kept on purpose
+    warn_new_fields = False  # 121 of ~372 columns kept on purpose (contracts/nflverse.pbp.fields)
 
     @property
     def keep_fields(self):
@@ -187,3 +187,41 @@ class FfOpportunityLoader(WeekCsvLoader):
         bad = conn.execute(f"""SELECT game_id, posteam, COUNT(*) FROM core_ff_opportunity WHERE {where}
                                AND player_id IS NULL GROUP BY 1,2 HAVING COUNT(*) > 1""", p).fetchall()
         return [f"{scope.label}: more than one unattributed row per team-game: {[tuple(r) for r in bad][:3]}"] if bad else []
+
+
+class FtnChartingLoader(WeekCsvLoader):
+    """nflverse's redistribution of FTN charting (ftn_charting/ftn_charting_<season>.csv,
+    2022+). Distinct from v2's own FTN API tables (core_ftn_*): this is nflverse's
+    file, keyed by nflverse_game_id/nflverse_play_id - so it also carries the exact
+    FTN play id <-> nflverse play id link (ftn_play_id), for 2026 too. Used for
+    play-action / screen flags in the offense environment (v1's source, 2022+)."""
+    id = "nflverse.ftn_charting"
+    source, endpoint, table = "nflverse", "ftn_charting", "core_nflverse_ftn_charting"
+    url_template = NV + "/ftn_charting/ftn_charting_{season}.csv"
+    season_range = (2022, 9999)   # no 2021 asset (404)
+
+    def row_key(self, row):
+        return self.games.get(row["nflverse_game_id"])
+
+    def derive(self, row):
+        return {"season_type": self.row_key(row)[1]}
+
+    def checks(self, conn, scope):
+        """No team column: every scheduled game of the week must be charted, and each
+        charted play must be a pbp play (exact game_id + play_id)."""
+        where, p = self.scope_where(scope)
+        sched = {r[0] for r in conn.execute("SELECT game_id FROM core_schedule WHERE season = ? AND season_type = ? AND week = ?", p)}
+        got = {r[0] for r in conn.execute(f"SELECT DISTINCT nflverse_game_id FROM core_nflverse_ftn_charting WHERE {where}", p)}
+        fails = []
+        if sched - got:
+            fails.append(f"{scope.label}: scheduled games not charted (partial week?): {sorted(sched - got)}")
+        if got - sched:
+            fails.append(f"{scope.label}: charted games not in the schedule: {sorted(got - sched)}")
+        n_pbp = conn.execute(f"SELECT COUNT(*) FROM core_pbp WHERE {where}", p).fetchone()[0]
+        if n_pbp:
+            orphan, total = conn.execute(f"""SELECT SUM(NOT EXISTS (SELECT 1 FROM core_pbp b WHERE b.game_id = x.nflverse_game_id
+                                              AND b.play_id = x.nflverse_play_id)), COUNT(*)
+                                             FROM core_nflverse_ftn_charting x WHERE {where}""", p).fetchone()
+            if total and orphan / total > 0.01:
+                fails.append(f"{scope.label}: {orphan}/{total} charted plays are not pbp plays")
+        return fails

@@ -1,0 +1,37 @@
+-- nflverse FTN charting mirror (ftn_charting/ftn_charting_<season>.csv, 2022+). Owner:
+-- nflverse.ftn_charting. nflverse's names verbatim; booleans stay the file's 'TRUE'/'FALSE'.
+CREATE TABLE core_nflverse_ftn_charting (
+  ftn_game_id TEXT,
+  nflverse_game_id TEXT NOT NULL,
+  season INTEGER NOT NULL,
+  season_type TEXT NOT NULL,
+  week INTEGER NOT NULL,
+  ftn_play_id TEXT,
+  nflverse_play_id INTEGER NOT NULL,
+  starting_hash TEXT,
+  qb_location TEXT,
+  n_offense_backfield INTEGER,
+  n_defense_box INTEGER,
+  is_no_huddle TEXT,
+  is_motion TEXT,
+  is_play_action TEXT,
+  is_screen_pass TEXT,
+  is_rpo TEXT,
+  is_trick_play TEXT,
+  is_qb_out_of_pocket TEXT,
+  is_interception_worthy TEXT,
+  is_throw_away TEXT,
+  read_thrown TEXT,
+  is_catchable_ball TEXT,
+  is_contested_ball TEXT,
+  is_created_reception TEXT,
+  is_drop TEXT,
+  is_qb_sneak TEXT,
+  n_blitzers INTEGER,
+  n_pass_rushers INTEGER,
+  is_qb_fault_sack TEXT,
+  date_pulled TEXT,
+  load_id INTEGER NOT NULL REFERENCES load_log(load_id),
+  PRIMARY KEY (nflverse_game_id, nflverse_play_id)
+);
+CREATE INDEX ix_core_nflverse_ftn_charting_week ON core_nflverse_ftn_charting(season, season_type, week);

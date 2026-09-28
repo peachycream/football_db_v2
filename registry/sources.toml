@@ -60,7 +60,7 @@ weekly = true
 [[table]]
 name = "core_pbp"
 owner = "nflverse.pbp"
-source = "pbp/play_by_play_<season>.csv.gz (117 columns)"
+source = "pbp/play_by_play_<season>.csv.gz (121 columns; list = contracts/nflverse.pbp.fields)"
 grain = "week"
 weekly = true
 
@@ -90,6 +90,14 @@ name = "core_ngs_rushing"
 owner = "nflverse.ngs_rushing"
 source = "nextgen_stats/ngs_rushing.csv.gz"
 grain = "week"
+weekly = true
+
+[[table]]
+name = "core_nflverse_ftn_charting"
+owner = "nflverse.ftn_charting"
+source = "ftn_charting/ftn_charting_<season>.csv (nflverse's FTN mirror, 2022-)"
+grain = "week"
+seasons = "2022-"
 weekly = true
 
 [[table]]
@@ -317,6 +325,22 @@ name = "mart_participation_personnel"
 owner = "participation.seam"
 kind = "builder"
 note = "nflverse participation <2026, FTN >=2026; source on every row (fdb/participation.py)"
+
+[[table]]
+name = "mart_team_off_env_week"
+owner = "env.build"
+kind = "builder"
+note = "team offense environment sums (fdb/env.py); mart_team_def_env_week / _scheme_week too"
+
+[[table]]
+name = "mart_team_def_env_week"
+owner = "env.build"
+kind = "builder"
+
+[[table]]
+name = "mart_team_def_scheme_week"
+owner = "env.build"
+kind = "builder"
 
 [[table]]
 name = "my_franchises"

@@ -1,0 +1,11 @@
+# Required source fields, recorded from live 2022 + 2025 + 2026 files 2026-09-27.
+nflverse_game_id
+nflverse_play_id
+ftn_play_id
+season
+week
+is_play_action
+is_screen_pass
+is_no_huddle
+n_pass_rushers
+n_blitzers
