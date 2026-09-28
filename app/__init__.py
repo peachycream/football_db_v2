@@ -15,9 +15,11 @@ def create_app() -> Flask:
     from .matchups import bp as matchups_bp
     from .env import bp as env_bp
     from .viz import bp as viz_bp
+    from .dashboard import bp as dashboard_bp
     app.register_blueprint(ownership_bp)
     app.register_blueprint(matchups_bp)
     app.register_blueprint(env_bp)
     app.register_blueprint(viz_bp)
+    app.register_blueprint(dashboard_bp)
     app.add_url_rule("/", "home", lambda: redirect("/ownership/"))
     return app

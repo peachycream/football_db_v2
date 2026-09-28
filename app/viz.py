@@ -1,5 +1,5 @@
-"""The v1 React pages, served unchanged (Phase 6): /viz/offense, /viz/defense,
-/viz/matchups and the /matchups/ alias.
+"""The v1 React pages, served unchanged: /viz/offense, /viz/defense, /viz/matchups and
+the /matchups/ alias (Phase 6), /viz/player (Phase 7a).
 
 app/static/viz is v1's built bundle, copied verbatim; the pages talk to the
 ported JSON APIs (app/env.py, app/matchups.py) whose contracts are v1's. The
@@ -7,7 +7,7 @@ bundle picks its page from the URL and reads `window.__SEASON_CTX__` for the
 season it opens on (v1 season_ctx.script_tag); both are injected here, derived
 from the marts each page reads, so a new season needs no rebuild of the bundle.
 
-Only ported pages are routed. v1's other /viz pages (scatter, player, draft...)
+Only ported pages are routed. v1's other /viz pages (scatter, draft...)
 and the chat side panels call APIs v2 does not have yet, so they 404 rather
 than render half-working.
 """
@@ -32,7 +32,8 @@ def _surface(conn, table):
 
 
 def season_ctx(conn) -> dict:
-    out = {"offense": _surface(conn, "mart_team_off_env_week"), "defense": _surface(conn, "mart_team_def_env_week")}
+    out = {"offense": _surface(conn, "mart_team_off_env_week"), "defense": _surface(conn, "mart_team_def_env_week"),
+           "player": _surface(conn, "mart_player_week")}
     seasons = [r[0] for r in conn.execute("SELECT DISTINCT season FROM mart_team_week_opponent ORDER BY season DESC")]
     if seasons:
         wk = _default_week(conn, seasons[0])
@@ -54,5 +55,5 @@ def _shell():
     return resp
 
 
-for _path in ("/viz/offense", "/viz/defense", "/viz/matchups", "/matchups/"):
+for _path in ("/viz/offense", "/viz/defense", "/viz/matchups", "/matchups/", "/viz/player"):
     bp.add_url_rule(_path, f"viz_{_path.strip('/').replace('/', '_')}", _shell)

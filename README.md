@@ -3,7 +3,7 @@
 Fantasy football analytics database, rebuilt from scratch (2016 → present).
 
 - **Spec:** [`REBUILD_DESIGN.md`](REBUILD_DESIGN.md) — architecture, identity model, source-ownership registry, loader contract, phases.
-- **Progress log:** [`REBUILD_LOG.md`](REBUILD_LOG.md) — Phases 0–6 done; next is Phase 7a (Player Dashboard).
+- **Progress log:** [`REBUILD_LOG.md`](REBUILD_LOG.md) — Phases 0–7a done; next is Phase 7b (expected tackles/sacks model).
 
 The database is a build artifact: `python -m fdb rebuild` regenerates it from `data/raw/` with no network calls.
 
@@ -17,7 +17,7 @@ python -m fdb rebuild                             # regenerate the DB from data/
 python -m fdb weekly [--test-alert]               # the scheduled job
 python -m unittest discover -s tests -t .         # tests
 python -m app                                     # web app (Flask): http://127.0.0.1:5001/ownership/
-                                                  #   /viz/offense  /viz/defense  /matchups/  (v1's React pages)
+                                                  #   /viz/player  /viz/offense  /viz/defense  /matchups/  (v1's React pages)
 python -m fdb parity-ownership --v1 <v1 db> --explain   # Phase 3 gate vs the v1 oracle
 ```
 Fantasy leagues in scope and "which franchise is mine": [`config/my_franchises.toml`](config/my_franchises.toml).

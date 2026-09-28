@@ -343,6 +343,27 @@ owner = "env.build"
 kind = "builder"
 
 [[table]]
+name = "mart_player_week"
+owner = "dashboard.build"
+kind = "builder"
+note = "Player Dashboard marts (fdb/dashboard.py): player-week stats+snaps+rz, QB dropbacks/zones, RB lanes"
+
+[[table]]
+name = "mart_qb_dropback_week"
+owner = "dashboard.build"
+kind = "builder"
+
+[[table]]
+name = "mart_qb_pass_zones_week"
+owner = "dashboard.build"
+kind = "builder"
+
+[[table]]
+name = "mart_rb_run_lanes_week"
+owner = "dashboard.build"
+kind = "builder"
+
+[[table]]
 name = "my_franchises"
 owner = "fantasy.config"
 kind = "builder"

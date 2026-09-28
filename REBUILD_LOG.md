@@ -346,3 +346,47 @@ Plus: **one id per source per human** — enforced in `claim()` for every source
 **OPEN ITEMS:** (1) Discord webhook. (2) Trayanum/Salter overrides. (3) OL gate reading (Phase 4). (4) §9 FTN 2021 trap revision (Phase 5). (5) Sleeper scoring deferred (§10.3), so Sleeper leagues are not offered in Matchups. (6) `env.build` is the slowest builder (~4 min, all seasons every run); scope it to changed seasons if weekly time matters. (7) v1 Game Day widget and chat panels not ported.
 
 **NEXT: Phase 7a — Player Dashboard** (spec §8).
+
+## Phase 7a — Player Dashboard — GATE PASSED 2026-09-28 (Windows, same session)
+
+### Built
+| Piece | Where |
+|---|---|
+| Builder | `dashboard.build` (`fdb/dashboard.py`) → `mart_player_week` (nflverse stats + snap counts by exact pfr id + inside-20 targets from pbp; snap-only weeks kept), `mart_qb_dropback_week`, `mart_qb_pass_zones_week`, `mart_rb_run_lanes_week` (v1's ingest filters exactly). Post-write checks: every nflverse stat line present, targets equal core per season, ≥99% snap rows resolve, zone attempts 97–100% of nflverse attempts, lanes ≥90% of designed runs |
+| Views | `schema/017_mart_dashboard.sql`: `mart_pff_offense_season`, `mart_pff_defense_season` (alignment/role snaps, counts, grades, position_group DI→DT ED→DE), `mart_pff_qb_dropbacks_season`, `mart_pff_receiving_week`, `mart_pff_rushing_week`, `mart_ngs_passing_week`, `mart_ff_opportunity_week` (season_type from the game's schedule type), `mart_player_league_points_week` (MFL reported, exact mfl id → gsis), `mart_player_profile` |
+| APIs | `app/dashboard.py`: all 11 v1 `/api/dashboard/*` routes, **v1 JSON contracts**; `/viz/player` serves v1's page (season context `player` from `mart_player_week`). The player key is the gsis id; v1's deep link `?player=` works with it |
+| Tests | 113 (9 new in `tests/test_phase7a.py`) |
+
+Where §6 lists `mart_idp_week`, `mart_idp_fp_split` and `mart_dashboard_tiles`: IDP player-weeks are Phase 6's `mart_player_allowed_week` (side `def`); the non-tackle split and the tiles are computed at read time from the marts (scoring is never stored, rule 4). `mart_resolution` (ops) is not built yet.
+
+### Decisions made in the port (each changes a number vs v1, deliberately)
+1. **Position is per season, from the source.** Defenders bucket by PFF's position that season; offense by nflverse's position in the player's last REG week. v1 used one current label for every season.
+2. **Retired sources not carried (spec):** WR/TE target share, air-yards share and targets come from nflverse (v1: FPD); inside-20 targets from pbp (`yardline_100 ≤ 20`, pass attempt, not 2-pt) for every season. v1's FTN rule needs FTN's throwaway flag (`qbta`), which v2's FTN feed does not carry. **The FPD route tree has no successor: `/routes` returns `has_data: false`, so the page hides that panel.**
+3. **QB CPOE** = NGS weekly CPOE weighted by attempts; **passer rating** = the NFL formula on REG totals (v2's loader keeps NGS weeks, not NGS's week-0 season row). Verified: Stafford 2025 weighted CPOE 2.0330 = NGS's own season row 2.03298.
+4. **Expected FP and RB routes are REG / REG games.** v1 put playoff games in the numerator and divided by REG games (CMC 2025: v1 470.9 = REG 433.9 + POST 37.0 expected FP; routes 567 = 517 + 50).
+5. **Expected tackles/sacks tiles (DE/DT 1,2,3,6; LB 1,2,3,6; CB/S 1,2) show "model pending (Phase 7b)"**, per §6.1. Never the name-matched vendor CSV.
+6. **IDP alignment and the RB PFF chips cover 2016+** (v2 has PFF from 2016; v1 2023+). Missed-tackle rate is computed from counts: `missed / (tackles + assists + missed)`, which equals PFF's column.
+7. **% Non-Tackle FP** uses v2's additive rules per player-week (Phase 6 finding); v1 used the collapsed catch-all row. Under "Default" scoring the header, tiles and split use v1's house IDP formula.
+8. League list: MFL leagues as `mfl:<id>:<season>`; Sleeper leagues listed **locked** ("scoring deferred, §10.3").
+
+### Gate
+- ✅ **Every tile renders for 2025 and 2026**: all 11 endpoints for the top 6 players of every bucket, both seasons, Default and 30590 scoring: 0 errors, 0 `n/a` tiles, 9 tiles each, none slower than 3 s. Checked in the browser: QB (Allen) and CB (Surtain) 2026 pages render with their profile sections.
+- ✅ **Values vs v1, 2025, top 25 per bucket, every tile.** Exact where the v1 source is still trusted: QB yards/att/TDs/rush, passer rating, PFF grade, YPA; RB touches/rush yards/carries/targets/snap share/target share/PFF grade; WR/TE receptions/yards/PFF grades/route grade/WOPR/snap share; IDP PFF grades, slot/box rate, IDP points. Every non-exact value traced:
+  | Difference | Cause |
+  |---|---|
+  | Per-game values for Allen (16 vs 17 G), Lamb, Parkinson, Otton | a week with snaps but no stat line (Allen wk18: 1 snap). v1's own rule counts it; v1's game logs had no row. Totals identical |
+  | CPOE (0/25 exact) | v1's NGS season row is stale; v2 equals NGS's current season row |
+  | Expected FP, RB routes | v1 playoff numerator (decision 4) |
+  | WR/TE target share, air-yards share, targets, inside-20 | FPD retired (decision 2); nflverse share within ~1 pt |
+  | Cam Ward passer rating, Chig Okonkwo WOPR/snap/route grade | v1 has no row (null) |
+  | Buckets (26 of 225) | per-season position (decision 1: Kyle Van Noy ED, Brandon Jones S, Scott Matlock FB in 2025), **and v1 defects**: v1's 2025 "top defenders" include retired namesakes holding current PFF lines (T.Y. Hilton as DT, Jordan Mills, Corey Washington, Dantrell Savage) |
+  | IDP points | **v2 = MFL's own records by exact id**: 17,993 of 18,015 shared player-weeks equal; v1 filed 194 non-zero weeks under retired namesakes (Kris Jenkins 2001–10, Bryan Thomas, Cody Brown: 471 pts) and missed 230 (Asante Samuel 76, Brandon Jones wk15 17). 16 of 18,332 MFL rows are unresolved (league-scoped devy ids) |
+  | % Non-Tackle FP | additive rules vs v1's collapsed catch-all (decision 7) |
+  | Expected-tackles/sacks tiles | Phase 7b (decision 5) |
+- ✅ `dashboard.build` idempotent (identical row hashes; 256k / 6.8k / 57.6k / 62k rows, ~1.5–2 min).
+- ✅ `fdb weekly`: 44/44 OK, including `dashboard.build`.
+- ✅ **`fdb rebuild` ×2 → identical `7b347841…bb32`, 0 network calls** (~12–16 min each; wishlist exported and re-imported both times). The second run's raw `fdb hash` printed `7af590cf…`: Phase 7b's schema file (`018`, an empty `core_pff_pass_rush_week`) was written while it ran, and the rebuild applied it. Every shared table is identical; excluding that empty table the hash is `7b347841…` again. ✅ 113 tests pass.
+
+**OPEN ITEMS:** (1) Discord webhook. (2) Trayanum/Salter overrides. (3) OL gate reading (Phase 4). (4) §9 FTN 2021 trap revision (Phase 5). (5) Sleeper scoring deferred. (6) `env.build` + `dashboard.build` rebuild all seasons every run (~6 min together). (7) Route-tree panel has no source (FPD retired): PFF's route-level facet would be a new loader, Turon's call. (8) `mart_resolution` (ops) not built.
+
+**NEXT: Phase 7b — Expected tackles/sacks model** (spec §6.1).
