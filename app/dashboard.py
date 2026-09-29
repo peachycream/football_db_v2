@@ -14,8 +14,9 @@ The player key is the gsis id (v1: a name slug). What changed, each deliberate:
     FPD route tree has no successor, so /routes answers has_data = false.
   * Passer rating is the NFL formula on REG totals and CPOE is NGS's weekly CPOE
     weighted by attempts (v1 read NGS's season row, which v2's loader does not keep).
-  * Expected tackles/sacks tiles are Phase 7b's own model (§6.1): until it passes
-    its gate they render as "model pending", never from the name-matched vendor CSV.
+  * Expected tackles/sacks are v2's own model (§6.1, fdb/idp_model.py), never the
+    name-matched vendor CSV. Expected tackles passed its gate and is live; the three
+    expected-SACK tiles render "model pending" until the sack gate is resolved.
   * League points are MFL's REPORTED scores by exact mfl id -> gsis. Sleeper scoring
     is deferred (§10.3): Sleeper leagues are listed, locked.
   * v2 has PFF defense and rushing from 2016, so the IDP-alignment section and the RB
@@ -36,7 +37,7 @@ _OFFENSE = {"QB": "QB", "RB": "RB", "HB": "RB", "FB": "RB", "WR": "WR", "TE": "T
 _DEFENSE = {"ED": "DE", "DE": "DE", "EDGE": "DE", "DI": "DT", "DT": "DT", "IDL": "DT", "DL": "DT", "NT": "DT",
             "LB": "LB", "ILB": "LB", "OLB": "LB", "MLB": "LB", "CB": "CB", "S": "S", "FS": "S", "SS": "S", "SAF": "S",
             "DB": "S"}
-PENDING = "model pending (Phase 7b)"
+PENDING = "model pending (§6.1 sack gate)"
 
 # House default IDP scoring, v1 dashboard.py verbatim (PFF season counts). Tackle family first.
 DEFAULT_IDP = [("tackles", 1.25, "T"), ("assists", 0.75, "T"), ("tackles_for_loss", 3, "T"), ("sacks", 5, "N"),
@@ -431,24 +432,29 @@ _PTS = [{"n": 4, "label": "IDP Pts", "kind": "points_total", "fmt": "n1", "pctil
         {"n": 5, "label": "IDP Pts/G", "kind": "points_pg", "fmt": "n1", "pctile": "compute", "league_dep": True}]
 _GRADES = [{"n": 7, "label": "PFF Def Grade", "kind": "dgrade", "col": "grade_defense", "fmt": "grade", "pctile": "compute"},
            {"n": 8, "label": "PFF Run-Def", "kind": "dgrade", "col": "grade_run_defense", "fmt": "grade", "pctile": "compute"}]
+def _xt(n, label, kind, star=False, fmt="plus1"):
+    """Expected-tackles tiles: v1's 'stored' percentile = PERCENT_RANK within position + season."""
+    return {"n": n, "label": label, "star": star, "kind": kind, "fmt": fmt, "pctile": "rank"}
+
+
 _EDGE_INT = [_pending(1, "Exp Sack %ile", True), _pending(2, "Exp Sacks/G"), _pending(3, "Sacks vs Exp", True), *_PTS,
-             _pending(6, "Tackles vs Exp", True), *_GRADES,
+             _xt(6, "Tackles vs Exp", "xt", True), *_GRADES,
              {"n": 9, "label": "PFF Pass-Rush", "kind": "dgrade", "col": "grade_pass_rush", "fmt": "grade", "pctile": "compute"}]
 _COV = {"n": 9, "label": "PFF Coverage", "kind": "dgrade", "col": "grade_coverage", "fmt": "grade", "pctile": "compute"}
 TILE_SPECS.update({
     "DE": _EDGE_INT, "DT": _EDGE_INT,
-    "LB": [_pending(1, "Tackles vs Exp", True), _pending(2, "Run Tkl vs Exp", True), _pending(3, "Pass Tkl vs Exp", True),
-           *_PTS, _pending(6, "Tkl vs Exp/G"), *_GRADES, _COV],
-    "CB": [_pending(1, "Tackles vs Exp", True), _pending(2, "Run Tkl vs Exp", True),
+    "LB": [_xt(1, "Tackles vs Exp", "xt", True), _xt(2, "Run Tkl vs Exp", "xt_run", True), _xt(3, "Pass Tkl vs Exp", "xt_pass", True),
+           *_PTS, {**_xt(6, "Tkl vs Exp/G", "xt_pg", fmt="n2"), "pctile": "compute"}, *_GRADES, _COV],
+    "CB": [_xt(1, "Tackles vs Exp", "xt", True), _xt(2, "Run Tkl vs Exp", "xt_run", True),
            {"n": 3, "label": "Slot Snap Rate", "kind": "snaprate", "col": "snaps_slot", "fmt": "pct_frac", "pctile": "compute"},
            *_PTS, {"n": 6, "label": "% Non-Tackle FP", "star": True, "kind": "nontackle_pct", "fmt": "pct_as",
                    "pctile": "compute", "league_dep": True}, *_GRADES, _COV],
-    "S": [_pending(1, "Tackles vs Exp", True), _pending(2, "Run Tkl vs Exp", True),
+    "S": [_xt(1, "Tackles vs Exp", "xt", True), _xt(2, "Run Tkl vs Exp", "xt_run", True),
           {"n": 3, "label": "Box Snap Rate", "kind": "snaprate", "col": "snaps_box", "fmt": "pct_frac", "pctile": "compute"},
           *_PTS, {"n": 6, "label": "% Non-Tackle FP", "star": True, "kind": "nontackle_pct", "fmt": "pct_as",
                   "pctile": "compute", "league_dep": True}, *_GRADES, _COV],
 })
-_PER_GAME = {"count", "expcount", "points_pg", "routes"}
+_PER_GAME = {"count", "expcount", "points_pg", "routes", "xt_pg"}
 
 
 def pool_ids(conn, bucket, season, pos):
@@ -465,6 +471,20 @@ def pool_ids(conn, bucket, season, pos):
                 AND season_type = 'REG' GROUP BY gsis_id""", (season,)) if r and r >= 100 * f and pos.get(g, (None, None))[1] == bucket}
     return {g for g, s in conn.execute("SELECT gsis_id, snaps_total FROM mart_pff_defense_season WHERE season = ? AND position_group = ?",
                                        (season, bucket)) if g and s and s >= 100 * f and pos.get(g, (None, None))[1] == bucket}
+
+
+def xt_pool(conn, bucket, season):
+    """v1's expected-tackles pool: >= 100 on-field run+pass plays (prorated in-season), same position group."""
+    f = _season_frac(conn, season)
+    return {g for g, n in conn.execute("""SELECT gsis_id, SUM(run_plays + pass_plays) FROM mart_idp_expected_tackles_week
+            WHERE season = ? AND season_type = 'REG' AND position_group = ? GROUP BY gsis_id""", (season, bucket)) if n >= 100 * f}
+
+
+def _percent_rank(pv, vals):
+    """SQL PERCENT_RANK on 0-100: (rank - 1) / (n - 1), rank ascending (v1's stored percentiles)."""
+    if pv is None or not vals:
+        return None
+    return round(100 * sum(1 for v in vals if v < pv) / (len(vals) - 1)) if len(vals) > 1 else 100
 
 
 def _passer_rating(att, comp, yds, td, ints):
@@ -509,6 +529,12 @@ def _value_map(conn, season, spec, pids, gmap, league_id):
         return points_map(conn, season, league_id, list(pids), "defense")
     if k == "points_pg":
         return per_game(points_map(conn, season, league_id, list(pids), "defense"))
+    if k in ("xt", "xt_run", "xt_pass", "xt_pg"):
+        expr = {"xt": "actual_tackles_run + actual_tackles_pass - expected_tackles_run - expected_tackles_pass",
+                "xt_pg": "actual_tackles_run + actual_tackles_pass - expected_tackles_run - expected_tackles_pass",
+                "xt_run": "actual_tackles_run - expected_tackles_run", "xt_pass": "actual_tackles_pass - expected_tackles_pass"}[k]
+        m = q(f"SELECT gsis_id, SUM({expr}) FROM mart_idp_expected_tackles_week WHERE {reg} AND gsis_id IN ({ph}) GROUP BY gsis_id")
+        return per_game(m) if k == "xt_pg" else m
     if k == "nontackle_pct":
         return nontackle_map(conn, season, league_id, list(pids))
     return {}
@@ -556,9 +582,15 @@ def tiles():
                             "raw": None, "sub": PENDING, "percentile": None, "per_game": False, "league_dep": False,
                             "warn": False})
                 continue
-            vmap = _value_map(conn, season, spec, list(pids), gmap, league_id)
-            pv = vmap.get(gsis)
-            pct = _percentile(pv, eligible, vmap, invert=bool(spec.get("invert"))) if gsis in eligible else None
+            if spec.get("pctile") == "rank":
+                xpool = xt_pool(conn, bucket, season)
+                vmap = _value_map(conn, season, spec, list(xpool | {gsis}), gmap, league_id)
+                pv = vmap.get(gsis)
+                pct = _percent_rank(pv, [vmap[g] for g in xpool if vmap.get(g) is not None]) if gsis in xpool else None
+            else:
+                vmap = _value_map(conn, season, spec, list(pids), gmap, league_id)
+                pv = vmap.get(gsis)
+                pct = _percentile(pv, eligible, vmap, invert=bool(spec.get("invert"))) if gsis in eligible else None
             out.append({"n": spec["n"], "label": spec["label"], "star": bool(spec.get("star")), "display": _fmt(pv, spec["fmt"]),
                         "raw": pv, "sub": None, "percentile": pct, "per_game": spec["kind"] in _PER_GAME,
                         "league_dep": bool(spec.get("league_dep")), "warn": bool(spec.get("warn"))})

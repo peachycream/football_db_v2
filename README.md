@@ -3,7 +3,7 @@
 Fantasy football analytics database, rebuilt from scratch (2016 → present).
 
 - **Spec:** [`REBUILD_DESIGN.md`](REBUILD_DESIGN.md) — architecture, identity model, source-ownership registry, loader contract, phases.
-- **Progress log:** [`REBUILD_LOG.md`](REBUILD_LOG.md) — Phases 0–7a done; next is Phase 7b (expected tackles/sacks model).
+- **Progress log:** [`REBUILD_LOG.md`](REBUILD_LOG.md) — Phases 0–7b done (expected sacks pending by decision); next is Phase 8 (cutover).
 
 The database is a build artifact: `python -m fdb rebuild` regenerates it from `data/raw/` with no network calls.
 

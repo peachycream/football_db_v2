@@ -1,0 +1,52 @@
+-- PFF defense/pass_rush facet, weekly (REBUILD_DESIGN §6.1: expected sacks from pass-rush WINS).
+-- Report key `pass_rush_summary`. Wire names verbatim; types from live 2016 wk1 + 2025 wk1 + 2025
+-- conference round (identical column sets). Win rate is stored as PFF sends it, but readers compute
+-- pass_rush_wins / pass_rush_opp (verified equal); true_pass_set_* is PFF's TPS subset.
+-- Framework columns as every PFF week table: season, season_type, week (schedule), pff_week.
+CREATE TABLE core_pff_pass_rush_week (
+  season INTEGER NOT NULL,
+  season_type TEXT NOT NULL CHECK (season_type IN ('REG', 'POST')),
+  week INTEGER NOT NULL,
+  pff_week INTEGER NOT NULL,
+  player_id INTEGER NOT NULL,
+  player TEXT,
+  position TEXT,
+  team_name TEXT NOT NULL,
+  team TEXT,
+  franchise_id INTEGER NOT NULL,
+  jersey_number TEXT,
+  player_game_count INTEGER,
+  draft_season INTEGER,
+  eligible_season INTEGER,
+  batted_passes INTEGER,
+  declined_penalties INTEGER,
+  grades_pass_rush_defense REAL,
+  hits INTEGER,
+  hurries INTEGER,
+  pass_rush_opp INTEGER,
+  pass_rush_percent REAL,
+  pass_rush_win_rate REAL,
+  pass_rush_wins INTEGER,
+  penalties INTEGER,
+  prp REAL,
+  sacks INTEGER,
+  snap_counts_pass_play INTEGER,
+  snap_counts_pass_rush INTEGER,
+  total_pressures INTEGER,
+  true_pass_set_batted_passes INTEGER,
+  true_pass_set_grades_pass_rush_defense REAL,
+  true_pass_set_hits INTEGER,
+  true_pass_set_hurries INTEGER,
+  true_pass_set_pass_rush_opp INTEGER,
+  true_pass_set_pass_rush_percent REAL,
+  true_pass_set_pass_rush_win_rate REAL,
+  true_pass_set_pass_rush_wins INTEGER,
+  true_pass_set_prp REAL,
+  true_pass_set_sacks INTEGER,
+  true_pass_set_snap_counts_pass_play INTEGER,
+  true_pass_set_snap_counts_pass_rush INTEGER,
+  true_pass_set_total_pressures INTEGER,
+  load_id INTEGER NOT NULL REFERENCES load_log(load_id),
+  PRIMARY KEY (season, season_type, week, player_id)
+);
+CREATE INDEX ix_core_pff_pass_rush_week_player ON core_pff_pass_rush_week(player_id);

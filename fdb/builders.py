@@ -1,5 +1,5 @@
 """Builders: derived tables rebuilt wholly from core tables. id -> callable(conn) -> report dict."""
-from . import dashboard, env, fantasy, identity, participation
+from . import dashboard, env, fantasy, identity, idp_model, participation
 
 
 def _identity(conn):
@@ -9,4 +9,5 @@ def _identity(conn):
 
 
 BUILDERS = {"identity.build": _identity, "fantasy.config": fantasy.build, "participation.seam": participation.build, "env.build": env.build,
-            "dashboard.build": dashboard.build}
+            "dashboard.build": dashboard.build,
+            "idp_model.build": idp_model.build}

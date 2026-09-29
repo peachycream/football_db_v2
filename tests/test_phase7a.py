@@ -108,7 +108,10 @@ class Values(unittest.TestCase):
     def test_every_bucket_has_nine_tiles_and_pending_is_labelled(self):
         for b, specs in d.TILE_SPECS.items():
             self.assertEqual(sorted(s["n"] for s in specs), list(range(1, 10)), b)
-        self.assertEqual(sum(s["kind"] == "pending" for s in d.TILE_SPECS["DE"]), 4)   # §6.1: "those four tiles"
+        # 7b: expected tackles passed §6.1's gate and is live; the three expected-SACK tiles stay pending
+        self.assertEqual([s["label"] for s in d.TILE_SPECS["DE"] if s["kind"] == "pending"],
+                         ["Exp Sack %ile", "Exp Sacks/G", "Sacks vs Exp"])
+        self.assertFalse(any(s["kind"] == "pending" for b in ("LB", "CB", "S") for s in d.TILE_SPECS[b]))
 
 
 class Apis(unittest.TestCase):

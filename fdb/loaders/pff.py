@@ -137,6 +137,40 @@ class CoverageSchemeWeekLoader(PffWeekLoader):
     facet = "defense/coverage_scheme"
 
 
+# PFF rows that break wins <= opportunities <= pass-rush snaps (or sacks <= snaps) AT SOURCE, stored verbatim and
+# named here so the check stays strict for every other row. (season, season_type, week, pff id)
+PASS_RUSH_ERRATA = {   # the complete list for 2016-2026 wk2: 5 rows in 217 weeks, all 1-2 snap DB/LB rushes
+    (2016, "POST", 21, 7864),    # Logan Ryan NE CB (Super Bowl LI): 2 wins on 1 opportunity
+    (2018, "REG", 2, 6157),      # Patrick Peterson ARZ CB: 1 win on 0 opportunities
+    (2022, "REG", 12, 43645),    # Jake Hansen HST LB: 2 sacks on 1 pass-rush snap
+    (2023, "REG", 15, 97340),    # Cameron Mitchell CLV CB: 2 wins on 1 opportunity; PFF's own win rate 200.0
+    (2024, "REG", 13, 124326),   # Antonio Johnson JAX S: 2 wins on 1 opportunity; PFF's own win rate 200.0
+}
+
+
+class PassRushWeekLoader(PffWeekLoader):
+    """Pass-rush wins/opportunities per rusher-week (REBUILD_DESIGN §6.1 expected sacks).
+    The whole-league opportunity count is checked against the defense facet's own
+    pass-rush snaps for the same week: the two facets describe the same rushes."""
+    id = "pff.pass_rush_week"
+    endpoint = "pass_rush_summary"
+    table = "core_pff_pass_rush_week"
+    facet = "defense/pass_rush"
+
+    def extra_checks(self, conn, scope):
+        where, params = self.scope_where(scope)
+        fails = []
+        bad = [r for r in conn.execute(f"""SELECT season, season_type, week, player_id FROM {self.table} WHERE {where}
+                               AND (pass_rush_wins > pass_rush_opp OR pass_rush_opp > snap_counts_pass_rush
+                                    OR sacks > snap_counts_pass_rush)""", params) if tuple(r) not in PASS_RUSH_ERRATA]
+        if bad:
+            fails.append(f"{scope.label}: {len(bad)} rows with wins > opportunities > pass-rush snaps: {[r[3] for r in bad]}")
+        mine = conn.execute(f"SELECT SUM(snap_counts_pass_rush) FROM {self.table} WHERE {where}", params).fetchone()[0]
+        theirs = conn.execute(f"SELECT SUM(snap_counts_pass_rush) FROM core_pff_defense_week WHERE {where}", params).fetchone()[0]
+        if mine and theirs and abs(mine - theirs) > 0.01 * theirs:
+            fails.append(f"{scope.label}: pass-rush snaps {mine} vs defense facet {theirs} (>1% apart)")
+        return fails
+
 # ------------------------------------------------------------ season grades --
 class PffSeasonLoader(PffWeekLoader):
     """Season grain; the week list is every COMPLETED week of the season (all of REG
@@ -193,5 +227,5 @@ class DefenseSeasonLoader(PffSeasonLoader):
     facet = "defense/summary"
 
 
-LOADERS = (DefenseWeekLoader, FgWeekLoader, PassingWeekLoader, RushingWeekLoader, ReceivingWeekLoader,
+LOADERS = (DefenseWeekLoader, PassRushWeekLoader, FgWeekLoader, PassingWeekLoader, RushingWeekLoader, ReceivingWeekLoader,
            BlockingWeekLoader, CoverageSchemeWeekLoader, OffenseSeasonLoader, DefenseSeasonLoader)

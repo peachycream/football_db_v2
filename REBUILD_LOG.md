@@ -390,3 +390,46 @@ Where §6 lists `mart_idp_week`, `mart_idp_fp_split` and `mart_dashboard_tiles`:
 **OPEN ITEMS:** (1) Discord webhook. (2) Trayanum/Salter overrides. (3) OL gate reading (Phase 4). (4) §9 FTN 2021 trap revision (Phase 5). (5) Sleeper scoring deferred. (6) `env.build` + `dashboard.build` rebuild all seasons every run (~6 min together). (7) Route-tree panel has no source (FPD retired): PFF's route-level facet would be a new loader, Turon's call. (8) `mart_resolution` (ops) not built.
 
 **NEXT: Phase 7b — Expected tackles/sacks model** (spec §6.1).
+
+## Phase 7b — Expected tackles/sacks model (§6.1) — tackles GATE PASSED; sacks gate NOT met → tiles pending by Turon's decision 2026-09-29 (Windows, same session)
+
+### Built
+| Piece | Where |
+|---|---|
+| Loader | `pff.pass_rush_week` → `core_pff_pass_rush_week` (facet `defense/pass_rush`, report `pass_rush_summary`, 2016–2026; `schema/018`, `contracts/pff.pass_rush_week.fields`). Counts `pass_rush_wins` / `pass_rush_opp` (win rate = wins/opp, verified equal to PFF's). Checks: wins ≤ opp ≤ pass-rush snaps, sacks ≤ snaps, league pass-rush snaps within 1% of the defense facet's |
+| Model | builder `idp_model.build` (`fdb/idp_model.py`, `schema/019`) → `mart_idp_expected_tackles_week`, `mart_idp_tackle_rates` (240 cells, inspectable), `mart_idp_expected_sacks_week`, `mart_idp_sack_rates`. Fitted on **2016–2024 only**; 2025 held out |
+| Dashboard | Tackles vs Exp, Run/Pass Tkl vs Exp, Tkl vs Exp/G are live (DE/DT tile 6; LB 1,2,3,6; CB/S 1,2). v1's percentile convention (PERCENT_RANK within position + season, pool ≥100 on-field plays, prorated). The three expected-SACK tiles stay "model pending (§6.1 sack gate)" |
+| Tests | 119 (6 new in `tests/test_phase7b.py`) |
+
+**Expected tackles** = Σ over the scrimmage plays a defender was ON THE FIELD for of P(credit | PFF position group, play kind, ball-carrier gap, depth). On-field sets come from nflverse participation (2016–25) and FTN all-22 (2026, joined by nflverse's FTN mirror): gsis ids at source, no mapping. Credits use every pbp tackle slot, v1's settled convention. Cell rates are shrunk toward the parent cells (200 pseudo-plays). Role is deliberately coarse, because v1's bake-off showed a finer role model explains away the residual. **Expected sacks** = pass-rush wins × group sacks per win (DE 0.164, DT 0.122).
+
+### Found
+- **PFF pass-rush facet: 5 rows in 217 weeks break their own counts at source.** Each is a 1–2 snap DB/LB rush: 2 wins on 1 opportunity (PFF's own win rate 200.0), 1 win on 0 opportunities, or 2 sacks on 1 snap. The raw scan found the complete list; the rows are stored verbatim and named in `PASS_RUSH_ERRATA`, and the check stays strict for every other row.
+- A DNS outage mid-backfill (2020 wk12 → 2016) failed the fetches cleanly; nothing partial was written, and a re-run completed them.
+- **The 7a rebuild "mismatch" was not nondeterminism.** Schema 018 was written while rebuild 2 ran, so rebuild 2 carried an extra empty table. Every shared table was identical (recorded in 7a's entry).
+
+### Gate (§6.1: expected vs actual Spearman ≥ 0.80, season grain, 2025 held out; + rank agreement with v1's vendor values as a sanity check)
+| | pool | Spearman 2025 | by group | vendor agreement (expected / vs-exp) |
+|---|---|---|---|---|
+| **Tackles** | 702 defenders ≥100 plays | **0.949 ✅** | DT 0.897, DE 0.923, LB 0.945, CB 0.907, S 0.946; actual/expected 1.00–1.06 | 0.964 / 0.874 (n 681) |
+| **Sacks** | 266 DE/DT ≥100 rush snaps | **0.713 ❌** | DE 0.758, DT 0.556 | 0.948 / 0.889 (n 252) |
+
+**⚠ Decision for Turon: the sack gate.** No variant clears 0.80 on 2025. The same pool, each fitted on 2016–2024:
+| model | 2025 | 2020–2024 (leave-one-season-out) | predicts next season's sacks (r) |
+|---|---|---|---|
+| wins (spec) | 0.713 | 0.76–0.85 | 0.597 |
+| pressures (v1's model) | 0.790 | 0.81–0.88 | 0.603 |
+| vendor IDP.Show | 0.735 | — | (v1: 0.607) |
+| actual sacks themselves | — | — | 0.540 |
+
+2025 is a hard year for sacks: the vendor's own expected sacks reach only 0.735 there. Both v2 models predict next season's sacks better than actual sacks do, which is what makes "sacks vs expected" meaningful. Options: (a) keep the three sack tiles pending (spec as written, current state); (b) switch to the pressure model and accept 0.79 on 2025 with 0.81–0.88 elsewhere; (c) restate the gate as "beats the vendor on held-out same-season agreement and beats actual sacks on next-season prediction", which both models pass.
+
+**Decided 2026-09-29 (Turon): (a).** The three sack tiles stay "model pending", per §6.1 as written. The sack marts are still built weekly (they cost nothing extra and keep the evidence current), but no app reads them.
+
+- ✅ `pff.pass_rush_week` idempotent; `idp_model.build` idempotent (identical row hashes, ~4.5 min).
+- ✅ `fdb weekly`: 46/46 OK, including `pff.pass_rush_week` and `idp_model.build`.
+- ✅ **`fdb rebuild` ×2 → identical `1aa5a11f…017b`, 0 network calls** (~22 min each; the pass-rush errata weeks reload from raw exactly). ✅ 119 tests pass.
+
+**OPEN ITEMS:** (1) Discord webhook. (2) Trayanum/Salter overrides. (3) OL gate reading (Phase 4). (4) §9 FTN 2021 trap revision (Phase 5). (5) Sleeper scoring deferred. (6) `env.build` + `dashboard.build` + `idp_model.build` rebuild all seasons every run (~10 min together). (7) Route-tree panel has no source. (8) `mart_resolution` not built. (9) Sack tiles pending (decision (a)); revisit if a sack model clears 0.80 on a held-out season.
+
+**NEXT: Phase 8 — Cutover** (spec §8): v2 serves `:5000`, v1 archived read-only; gate = one full weekly cycle on v2 with no manual fix.

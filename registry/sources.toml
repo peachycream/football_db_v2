@@ -206,6 +206,15 @@ seasons = "2016-"
 weekly = true
 
 [[table]]
+name = "core_pff_pass_rush_week"
+owner = "pff.pass_rush_week"
+source = "PFF facet/defense/pass_rush week=N"
+grain = "week"
+seasons = "2016-"
+weekly = true
+note = "pass-rush wins/opportunities for the §6.1 expected-sacks model"
+
+[[table]]
 name = "core_pff_fg_week"
 owner = "pff.fg_week"
 source = "PFF facet/field_goal/summary week=N"
@@ -361,6 +370,27 @@ kind = "builder"
 [[table]]
 name = "mart_rb_run_lanes_week"
 owner = "dashboard.build"
+kind = "builder"
+
+[[table]]
+name = "mart_idp_expected_tackles_week"
+owner = "idp_model.build"
+kind = "builder"
+note = "§6.1 expected tackles/sacks, v2's own model (fdb/idp_model.py), fitted 2016-2024"
+
+[[table]]
+name = "mart_idp_tackle_rates"
+owner = "idp_model.build"
+kind = "builder"
+
+[[table]]
+name = "mart_idp_expected_sacks_week"
+owner = "idp_model.build"
+kind = "builder"
+
+[[table]]
+name = "mart_idp_sack_rates"
+owner = "idp_model.build"
 kind = "builder"
 
 [[table]]
