@@ -2,11 +2,11 @@
 the only tables they write are app_* (user-entered state).
 
 Run with the 3.13 interpreter (bare `python` is 3.14 with no Flask):
-    <Python313>/python.exe -m app          # http://127.0.0.1:5001/ownership/
+    <Python313>/python.exe -m app          # http://127.0.0.1:5001/  (APP_PORT; ops/start_app.bat serves :5000)
 """
 from pathlib import Path
 
-from flask import Flask, redirect
+from flask import Flask
 
 
 def create_app() -> Flask:
@@ -21,5 +21,6 @@ def create_app() -> Flask:
     app.register_blueprint(env_bp)
     app.register_blueprint(viz_bp)
     app.register_blueprint(dashboard_bp)
-    app.add_url_rule("/", "home", lambda: redirect("/ownership/"))
+    from .shell import hub_html
+    app.add_url_rule("/", "home", hub_html)
     return app

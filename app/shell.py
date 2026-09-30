@@ -5,7 +5,23 @@ import html
 
 from . import theme
 
-NAV_LINKS = [("/ownership/", "OWNERSHIP")]
+NAV_LINKS = [("/ownership/", "OWNERSHIP"), ("/viz/player", "PLAYER"), ("/viz/offense", "TEAM OFFENSE"),
+             ("/viz/defense", "TEAM DEFENSE"), ("/matchups/", "MATCHUPS")]
+
+# The hub at "/" (v1's landing page; the React pages' "Hub" link points here). Only ported apps.
+HUB_APPS = [
+    ("/ownership/", "Ownership", "Who owns whom across the MFL and Sleeper leagues; wishlist"),
+    ("/viz/player", "Player Dashboard", "Single-player tiles, QB zones, RB lanes, IDP alignment, snap trend"),
+    ("/viz/offense", "Team Offense Environment", "Pace, EPA, personnel splits, percentile-ranked, trend over time"),
+    ("/viz/defense", "Team Defense Environment", "EPA, pass rush, coverage, run defense allowed, scheme"),
+    ("/matchups/", "Matchup Tool", "Which defenses allow the most fantasy points to each position"),
+]
+
+
+def hub_html() -> str:
+    cards = "".join(f'<a href="{h}" class="card"><div class="card-title">{html.escape(t)}</div>'
+                    f'<div class="card-desc">{html.escape(d)}</div></a>' for h, t, d in HUB_APPS)
+    return page_shell("Hub", f'<div class="grid-3">{cards}</div>', active="/")
 
 BASE_STYLE = """
 <style>
@@ -249,7 +265,7 @@ def page_shell(title: str, content: str, active: str = "/") -> str:
 </head>
 <body>
 <div class="header">
-  <a href="/ownership/" class="logo">FOOTBALL DB</a>
+  <a href="/" class="logo">FOOTBALL DB</a>
   {nav_html(active)}
   <span class="status-dot"></span>
 </div>

@@ -16,3 +16,5 @@ __pycache__/
 .pytest_cache/
 # Runtime status
 PIPELINE_STATUS.json
+# Ops logs (ops/*.bat)
+data/logs/

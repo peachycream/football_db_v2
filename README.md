@@ -23,3 +23,19 @@ python -m fdb parity-ownership --v1 <v1 db> --explain   # Phase 3 gate vs the v1
 Fantasy leagues in scope and "which franchise is mine": [`config/my_franchises.toml`](config/my_franchises.toml).
 MFL credentials (`MFL_USERNAME`, `MFL_PASSWORD`), `PFF_API_KEY` and `FTN_API_KEY` live in `.env` (gitignored).
 Loaders are stdlib only (Python 3.11+): every nflverse asset is CSV/CSV.gz, so no pyarrow. The app needs Flask. On Windows use the 3.13 interpreter by full path (see `CLAUDE.md`).
+
+## Operations (since Phase 8, 2026-09-29)
+v2 is the live system. Two Windows Task Scheduler tasks, both running as the logged-in user:
+
+| Task | When | Runs | Log |
+|---|---|---|---|
+| `FootballDB v2 Weekly` | Wednesday 05:00, catches up if missed (StartWhenAvailable), 3 h limit | `ops\weekly.bat` → `python -m fdb weekly` (3.13 by full path) | `data\logs\weekly.log`, `PIPELINE_STATUS.json` |
+| `FootballDB v2 App` | at logon | `ops\start_app.bat` → the web app on http://127.0.0.1:5000/ | `data\logs\app.log` |
+
+Ops alerts go to Discord only once `OPS_DISCORD_WEBHOOK=https://discord.com/api/webhooks/...` is in `.env`; then run `python -m fdb weekly --test-alert` to confirm.
+
+**v1 is archived:** its four data-writing tasks (`FootballDB Weekly Capture All`, `FootballDB Matchup Refresh`, `FootballDB Weekly NFL Capture`, `FootballDB Weekly Env Capture`) are **disabled, not deleted**. v1's scouting, media and digest tasks were left as they were. To roll back to v1 (PowerShell):
+```
+Disable-ScheduledTask -TaskName 'FootballDB v2 Weekly'; Disable-ScheduledTask -TaskName 'FootballDB v2 App'
+'FootballDB Weekly Capture All','FootballDB Matchup Refresh','FootballDB Weekly NFL Capture','FootballDB Weekly Env Capture' | ForEach-Object { Enable-ScheduledTask -TaskName $_ }
+```

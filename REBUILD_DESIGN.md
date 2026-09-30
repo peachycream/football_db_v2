@@ -223,7 +223,7 @@ v2 builds its own model instead, keyed on `gsis_id` from the start:
 - `fdb weekly` = compute the last complete week → fetch → validate → load → check → rebuild marts → write `PIPELINE_STATUS.json` → Discord alert to `OPS_DISCORD_WEBHOOK`.
 - **Every loader joins the weekly job in the same phase it is written.** v1 built loaders for months and never an orchestrator; Team Offense is still missing from its weekly job.
 - A killed or partial run must be *visible*: status starts as `running` and the next run alerts if it finds a stale `running`. (v1's 09-22 job was killed with no trace.)
-- Windows Task Scheduler: Tuesday 05:00, `StartWhenAvailable=True`, and the job runs the **3.13 interpreter by full path**.
+- Windows Task Scheduler: **Wednesday** 05:00, `StartWhenAvailable=True`, and the job runs the **3.13 interpreter by full path**. (Was Tuesday; changed 2026-09-30 by Turon: a week is final 28 h after its last kickoff, so Monday night settles ~Wed 00:15 ET and a Tuesday run always loaded the week before.)
 
 ---
 

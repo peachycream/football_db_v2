@@ -432,4 +432,22 @@ Where §6 lists `mart_idp_week`, `mart_idp_fp_split` and `mart_dashboard_tiles`:
 
 **OPEN ITEMS:** (1) Discord webhook. (2) Trayanum/Salter overrides. (3) OL gate reading (Phase 4). (4) §9 FTN 2021 trap revision (Phase 5). (5) Sleeper scoring deferred. (6) `env.build` + `dashboard.build` + `idp_model.build` rebuild all seasons every run (~10 min together). (7) Route-tree panel has no source. (8) `mart_resolution` not built. (9) Sack tiles pending (decision (a)); revisit if a sack model clears 0.80 on a held-out season.
 
-**NEXT: Phase 8 — Cutover** (spec §8): v2 serves `:5000`, v1 archived read-only; gate = one full weekly cycle on v2 with no manual fix.
+## Phase 8 — Cutover — IN PROGRESS: v2 is live; gate = the first unattended weekly run, Wed 2026-10-07 05:00 (Windows, 2026-09-29/30)
+
+### Done 2026-09-29 (each change approved by Turon in chat)
+| Change | Detail |
+|---|---|
+| **v2 serves :5000** | Task `FootballDB v2 App` (at logon) → `ops\start_app.bat` (3.13 by full path, `APP_PORT=5000`, log `data\logs\app.log`). Started via the task and verified: every page and API 200 on :5000 |
+| **Hub at `/`** | v1's landing page had a hub; the React pages' "Hub" link points at `/`. `/` now lists the five ported apps, and the nav carries all five (was a redirect to `/ownership/`) |
+| **v2 weekly scheduled** | Task `FootballDB v2 Weekly`: **Wednesday** 05:00 (moved from Tuesday 2026-09-30, below), StartWhenAvailable, 3 h limit, `ops\weekly.bat` → `python -m fdb weekly`, log `data\logs\weekly.log`. **Proven through the scheduler itself** (Start-ScheduledTask 06:48): exit 0, 46/46 steps OK, 11.6 min |
+| **v1 archived** | Its four data-writing tasks were **disabled, not deleted**: Weekly Capture All, Matchup Refresh, Weekly NFL Capture, Weekly Env Capture (NFL and Env had been failing since 9/16, result 1). Left as they were, by Turon's choice: Scouting Preview/Recap (Discord posts from v1's DB), Media Reverify, the six past-dated digests. v1's DB file stays writable because the scouting jobs still use it. Rollback commands are in README "Operations" |
+| Tests | 120 (hub test added) |
+
+### Found
+- **v1 never had an ops webhook.** `OPS_DISCORD_WEBHOOK` is present but EMPTY in v1's `.env`, so nothing was copied. Alerts stay unset until Turon creates a webhook and pastes it into v2's `.env` (then `fdb weekly --test-alert`).
+- **Tuesday 05:00 was always one week behind → moved to Wednesday 05:00 (Turon, 2026-09-30; §7 updated).** A week is final 28 h after its last kickoff (GAME_HOURS 4 + SETTLE_HOURS 24, rule 7), so Monday night's game settles Wednesday ~00:15 ET. Today's scheduled-task run correctly loaded nothing new: week 3 settles 2026-09-30 00:15 ET. Moving the task to **Wednesday 05:00** would load each week the morning after it settles, with the same 28 h guard. The task was re-triggered 2026-09-30 05:50 through the scheduler to load week 3 (its first Wednesday slot had passed before the trigger existed).
+
+### Gate (spec: one full weekly cycle on v2 with no manual fix)
+- ⏳ Pending the first unattended scheduled run: **Wed 2026-10-07 05:00** (loads week 4). The check: `data\logs\weekly.log` shows exit=0 and 46/46 ok, the new week is loaded in core and marts, and pages on :5000 show it, with no manual step.
+
+**OPEN ITEMS:** (1) Discord webhook (create, then paste). (3) Trayanum/Salter overrides. (4) OL gate reading (Phase 4). (5) §9 FTN 2021 trap revision. (6) Sleeper scoring deferred. (7) Builders rebuild all seasons every run (~10 min). (8) Route-tree panel has no source. (9) `mart_resolution` not built. (10) Sack tiles pending (7b decision).

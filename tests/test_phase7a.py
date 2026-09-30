@@ -132,6 +132,12 @@ class Apis(unittest.TestCase):
         self.assertEqual(self.c.get("/api/dashboard/leagues").status_code, 200)
         self.assertEqual(self.c.get("/viz/player").status_code, 200)
 
+    def test_hub_lists_every_ported_app(self):
+        """Phase 8: '/' is the hub (v1's landing page; the React pages' Hub link points here)."""
+        html = self.c.get("/").get_data(as_text=True)
+        for href in ("/ownership/", "/viz/player", "/viz/offense", "/viz/defense", "/matchups/"):
+            self.assertIn(f'href="{href}" class="card"', html)
+
 
 if __name__ == "__main__":
     unittest.main()
