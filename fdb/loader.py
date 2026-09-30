@@ -22,6 +22,14 @@ class LoadRefused(RuntimeError):
     """The framework would not load this scope (not an error in the data)."""
 
 
+class NotPublished(LoadRefused):
+    """The SOURCE says this scope does not exist yet (a lagged feed, e.g. FTN all-22).
+    Raised by Loader.fetch only on the source's own explicit answer, never on a guess.
+    The weekly job reports it as PENDING, not failed, but only while the week is
+    younger than the loader's publish_grace_days; after that it is a failure, so a
+    feed that never arrives cannot hide."""
+
+
 @dataclass(frozen=True)
 class Scope:
     season: int
@@ -56,6 +64,7 @@ class Loader:
     fetches: bool = True          # False: reads the raw file another loader fetched (same source/endpoint)
     raw_retention: str = "keep3"  # non-final raw kept per partition: 'keep3' | 'daily' (newest per UTC day)
     season_types: tuple[str, ...] = ("REG", "POST")  # week grains: which schedule weeks are offered
+    publish_grace_days: int = 0   # >0: a lagged feed; NotPublished within this many days of the week going final is PENDING
 
     # Grains: 'snapshot' | 'reference' | 'season' | 'week' (nflverse), and the league
     # dimension added in Phase 3:

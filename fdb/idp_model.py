@@ -98,30 +98,36 @@ def _plays(conn, season):
 
 
 def _season_player_plays(conn, season, groups):
-    """Yield (season_type, week, gsis, group, cell, credits) per on-field defender-play, plus coverage stats."""
+    """-> (rows, source, stats, pending_weeks). rows = (season_type, week, gsis, group, cell, credits)
+    per on-field defender-play. A week with NO on-field list for any play is PENDING (its feed,
+    e.g. FTN all-22, is not published yet: ftn.all22 reports that and fails it after 14 days)
+    and is left out of the build; its stats are not counted. Partial coverage is judged by checks()."""
     field, source = _on_field(conn, season)
-    stats = {"credits": 0, "credits_on_field": 0, "plays": 0, "plays_with_field": 0}
+    wk = defaultdict(lambda: {"credits": 0, "credits_on_field": 0, "plays": 0, "plays_with_field": 0})
     rows = []
     for p in _plays(conn, season):
-        stats["plays"] += 1
+        st = wk[(p["season_type"], p["week"])]
+        st["plays"] += 1
         credited = defaultdict(int)
         for c in TACKLE_COLS:
             if p[c]:
                 credited[p[c]] += 1
-        stats["credits"] += sum(credited.values())
+        st["credits"] += sum(credited.values())
         players = field.get((p["game_id"], int(p["play_id"])))
         if not players:
             continue
-        stats["plays_with_field"] += 1
+        st["plays_with_field"] += 1
         cell = cell_of(p)
         for gsis, lab in players:
             grp = groups.get((season, gsis)) or _LABEL.get((lab or "").upper())
             if grp not in GROUPS:
                 continue
             n = credited.get(gsis, 0)
-            stats["credits_on_field"] += n
+            st["credits_on_field"] += n
             rows.append((p["season_type"], p["week"], gsis, grp, cell, n))
-    return rows, source, stats
+    pending = sorted(k for k, st in wk.items() if st["plays"] and not st["plays_with_field"])
+    stats = {k: sum(st[k] for w, st in wk.items() if w not in pending) for k in ("credits", "credits_on_field", "plays", "plays_with_field")}
+    return rows, source, stats, pending
 
 
 def fit_rates(counts):
@@ -138,10 +144,11 @@ def fit_rates(counts):
 def build(conn) -> dict:
     groups = _groups(conn)
     seasons = sorted({r[0] for r in conn.execute("SELECT DISTINCT season FROM core_pbp")})
-    per_season, fails, coverage = {}, [], {}
+    per_season, fails, coverage, pending = {}, [], {}, []
     counts = defaultdict(lambda: [0, 0])
     for s in seasons:
-        rows, source, st = _season_player_plays(conn, s, groups)
+        rows, source, st, pend = _season_player_plays(conn, s, groups)
+        pending += [f"{s} {t}{w}" for t, w in pend]
         if not rows:
             continue
         per_season[s] = (rows, source)
@@ -207,8 +214,10 @@ def build(conn) -> dict:
         conn.execute("ROLLBACK")
         raise
     n_t = sum(1 for _ in agg)
-    return {"failures": fails, "summary": f"{n_t} defender-weeks, {len(sacks)} rusher-weeks, "
-                                          f"{len(counts)} tackle cells, sack rates {({g: round(r, 3) for g, r in srate.items() if g in ('DE', 'DT')})}"}
+    return {"failures": fails, "pending": [f"expected tackles: {w} has no on-field lists yet (all-22 not published)" for w in pending],
+            "summary": f"{n_t} defender-weeks, {len(sacks)} rusher-weeks, {len(counts)} tackle cells, "
+                       f"sack rates {({g: round(r, 3) for g, r in srate.items() if g in ('DE', 'DT')})}"
+                       + (f"; PENDING {', '.join(pending)}" if pending else "")}
 
 
 def checks(conn, coverage) -> list[str]:

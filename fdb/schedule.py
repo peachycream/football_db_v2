@@ -37,6 +37,13 @@ def completed_weeks(conn: sqlite3.Connection, season: int, now: datetime | None 
     return sorted((k for k, ok in weeks.items() if ok), key=lambda k: (order[k[0]], k[1]))
 
 
+def week_final_at(conn, season: int, season_type: str, week: int) -> datetime | None:
+    """When the week became final: its last kickoff + GAME_HOURS + SETTLE_HOURS."""
+    rows = conn.execute("SELECT gameday, gametime FROM core_schedule WHERE season = ? AND season_type = ? AND week = ?",
+                        (season, season_type, week)).fetchall()
+    return max(eastern_to_utc(r[0], r[1]) for r in rows) + SETTLE if rows else None
+
+
 def week_is_complete(conn, season: int, season_type: str, week: int, now: datetime | None = None) -> bool:
     return (season_type, week) in completed_weeks(conn, season, now)
 

@@ -32,14 +32,25 @@ def run_loader(conn, lid: str) -> dict:
     detail = {"loader": lid, "fetched": 0, "cached": 0, "loaded": 0, "failures": []}
     season = schedule.current_season(conn)
     seasons = None if ld.grain in ("reference", "snapshot") else ([season] if season else [])
+    pending = set()
     for part in fw.fetch_partitions(conn, ld, seasons) if seasons != [] else []:
         try:
             _, fetched = fw.fetch(conn, ld, part)
+        except fw.NotPublished as e:
+            why = _pending_reason(conn, ld, part, seasons, e)
+            if why:
+                pending.add(part)
+                detail.setdefault("pending", []).append(why)
+            else:
+                detail["failures"].append(f"fetch {part}: NotPublished past its {ld.publish_grace_days}-day grace: {e}")
+            continue
         except Exception as e:  # e.g. MFL 429: report it, keep going with the other partitions
             detail["failures"].append(f"fetch {part}: {type(e).__name__}: {e}")
             continue
         detail["fetched" if fetched else "cached"] += 1
     for sc in fw.scopes(conn, ld, seasons) if seasons != [] else []:
+        if ld.partition(sc) in pending and fw.raw_for(ld, sc) is None:
+            continue   # reported as pending above
         if fw.raw_for(ld, sc) is None:
             detail["failures"].append(f"{sc.label}: no raw file (fetch failed?)")
             continue
@@ -56,6 +67,20 @@ def run_loader(conn, lid: str) -> dict:
     detail["rc"] = 1 if detail["failures"] else 0
     detail["duration_s"] = round(time.time() - t0, 1)
     return detail
+
+
+def _pending_reason(conn, ld, part, seasons, err) -> str | None:
+    """'<part>: not published yet (...)' while the week is inside the loader's grace, else None."""
+    if not ld.publish_grace_days:
+        return None
+    sc = next((s for s in fw.scopes(conn, ld, seasons) if ld.partition(s) == part and s.week is not None), None)
+    final = schedule.week_final_at(conn, sc.season, sc.season_type, sc.week) if sc else None
+    if final is None:
+        return None
+    age_d = (utcnow() - final).total_seconds() / 86400
+    if age_d > ld.publish_grace_days:
+        return None
+    return f"{part}: not published yet ({age_d:.1f} of {ld.publish_grace_days} grace days): {err}"
 
 
 def run() -> int:
@@ -91,6 +116,8 @@ def run() -> int:
             res = BUILDERS[bid](conn)
             step = {"loader": bid, "rc": 1 if res["failures"] else 0, "failures": res["failures"],
                     "summary": res.get("summary"), "duration_s": round(time.time() - t0, 1)}
+            if res.get("pending"):
+                step["pending"] = res["pending"]
         except Exception as e:
             step = {"loader": bid, "rc": 1, "failures": [f"{type(e).__name__}: {e}"]}
         st["steps"].append(step)
@@ -113,8 +140,9 @@ def run() -> int:
 
     lines = [f"football_db_v2 weekly: {'FAILED' if rc else 'OK'} ({len(st['steps'])} steps)"] + notes
     for s in st["steps"]:
-        mark = "FAIL" if s["rc"] else "ok"
-        lines.append(f"- {s['loader']}: {mark}" + (f" - {s['failures'][0][:300]}" if s.get("failures") else ""))
+        mark = "FAIL" if s["rc"] else ("ok, PENDING" if s.get("pending") else "ok")
+        lines.append(f"- {s['loader']}: {mark}" + (f" - {s['failures'][0][:300]}" if s.get("failures") else
+                                                   f" - {s['pending'][0][:300]}" if s.get("pending") else ""))
     print("\n".join(lines))
     alert.send("\n".join(lines))
     return rc

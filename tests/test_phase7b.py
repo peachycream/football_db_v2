@@ -50,5 +50,59 @@ class Errata(unittest.TestCase):
             self.assertIn(k[1], ("REG", "POST"))
 
 
+
+class LaggedFeed(unittest.TestCase):
+    """Phase 8: FTN all-22 publishes days after the games. All games 404 -> NotPublished
+    (pending within grace); some games 404 -> a hard failure (never a partial week)."""
+
+    def _fetch(self, found):
+        from unittest import mock
+        from fdb import ftn as api
+        from fdb.loader import NotPublished
+        from fdb.loaders.ftn import All22Loader
+        from tests.helpers import TempEnv
+        with TempEnv() as t:
+            c = t.conn()
+            c.execute("PRAGMA foreign_keys = OFF")
+            c.executemany("INSERT INTO core_ftn_games (season, gid, week, load_id) VALUES (2026, ?, 3, 1)", [(1,), (2,)])
+            ld = All22Loader()
+            ld.prepare(c)
+
+            def fake(path):
+                gid = int(path.rsplit("/", 1)[1])
+                if gid in found:
+                    return b"[]", {}
+                raise api.FtnError(f'HTTP 404 for {path}: "Game not found"')
+            with mock.patch.object(api, "get", side_effect=fake):
+                try:
+                    return ld.fetch("2026/REG03")
+                except NotPublished as e:
+                    return e
+                except api.FtnError as e:
+                    return e
+                finally:
+                    c.close()
+
+    def test_nothing_published_is_not_published(self):
+        from fdb.loader import NotPublished
+        self.assertIsInstance(self._fetch(found=set()), NotPublished)
+
+    def test_partial_week_is_a_failure(self):
+        from fdb.loader import NotPublished
+        r = self._fetch(found={1})
+        self.assertNotIsInstance(r, NotPublished)
+        self.assertIn("partial all-22", str(r))
+
+    def test_all_published_fetches(self):
+        body, params = self._fetch(found={1, 2})
+        self.assertEqual(body, b'{"1":[],"2":[]}')
+
+    def test_grace_is_bounded(self):
+        from fdb.loaders.ftn import All22Loader
+        self.assertEqual(All22Loader.publish_grace_days, 14)
+        from fdb.loader import Loader
+        self.assertEqual(Loader.publish_grace_days, 0)   # every other loader: never pending
+
+
 if __name__ == "__main__":
     unittest.main()
