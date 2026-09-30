@@ -451,6 +451,7 @@ Where §6 lists `mart_idp_week`, `mart_idp_fp_split` and `mart_dashboard_tiles`:
   - `ftn.all22`: NotPublished only when EVERY game of the week 404s "Game not found". Some games found = partial = an immediate failure (never loaded).
   - `idp_model.build`: coverage is judged per week. A week with NO on-field list at all is left out and reported pending (the 2026 expected-tackle tiles run a week or so behind the other tiles). Partial coverage still fails.
   - Verified live: `ftn.all22` rc 0, "2026/REG03: not published yet (0.3 of 14 grace days)"; `idp_model.build` no failures, "PENDING 2026 REG3". 124 tests (4 new).
+- **The home connection drops for minutes at a time** (2026-09-28 and twice on 09-30: DNS `getaddrinfo failed`, `connection forcibly closed`). The re-run after the lag fix failed only on FTN fetches for that reason. `fdb/http.py`, the only network path, now retries network-level errors 4 times with backoff (15/30/60/120 s, ~4 min). HTTP error RESPONSES are never retried there (callers own 429/404), and a disabled network (rebuild) is never retried or counted. 128 tests (4 new, `tests/test_http.py`).
 
 ### Gate (spec: one full weekly cycle on v2 with no manual fix)
 - ⏳ Pending the first unattended scheduled run: **Wed 2026-10-07 05:00** (loads week 4). The check: `data\logs\weekly.log` shows exit=0 and 46/46 ok, the new week is loaded in core and marts, and pages on :5000 show it, with no manual step.
