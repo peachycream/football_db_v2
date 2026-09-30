@@ -52,8 +52,8 @@ class Errata(unittest.TestCase):
 
 
 class LaggedFeed(unittest.TestCase):
-    """Phase 8: FTN all-22 publishes days after the games. All games 404 -> NotPublished
-    (pending within grace); some games 404 -> a hard failure (never a partial week)."""
+    """Phase 8: FTN all-22 publishes days after the games, game by game. Any game still 404
+    -> NotPublished (pending within grace, a failure after it); a partial week is never loaded."""
 
     def _fetch(self, found):
         from unittest import mock
@@ -87,11 +87,27 @@ class LaggedFeed(unittest.TestCase):
         from fdb.loader import NotPublished
         self.assertIsInstance(self._fetch(found=set()), NotPublished)
 
-    def test_partial_week_is_a_failure(self):
+    def test_partial_week_is_pending_and_never_loaded(self):
         from fdb.loader import NotPublished
         r = self._fetch(found={1})
-        self.assertNotIsInstance(r, NotPublished)
-        self.assertIn("partial all-22", str(r))
+        self.assertIsInstance(r, NotPublished)          # no payload returned, so nothing is written
+        self.assertIn("published 1/2 games", str(r))
+
+    def test_other_http_errors_still_fail(self):
+        from unittest import mock
+        from fdb import ftn as api
+        from fdb.loader import NotPublished
+        with mock.patch.object(api, "get", side_effect=api.FtnError('HTTP 500 for /all22/game/1: "boom"')):
+            from fdb.loaders.ftn import All22Loader
+            from tests.helpers import TempEnv
+            with TempEnv() as t:
+                c = t.conn(); c.execute("PRAGMA foreign_keys = OFF")
+                c.execute("INSERT INTO core_ftn_games (season, gid, week, load_id) VALUES (2026, 1, 3, 1)")
+                ld = All22Loader(); ld.prepare(c)
+                with self.assertRaises(api.FtnError) as cm:
+                    ld.fetch("2026/REG03")
+                self.assertNotIsInstance(cm.exception, NotPublished)
+                c.close()
 
     def test_all_published_fetches(self):
         body, params = self._fetch(found={1, 2})

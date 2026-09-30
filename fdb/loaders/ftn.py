@@ -193,10 +193,10 @@ class All22Loader(_FtnWeek):
     endpoint = "all22"
     table = "core_ftn_all22"
     season_range = (2026, 9999)   # nflverse participation carries on-field players through 2025
-    # FTN publishes all-22 days after the games (week 3 of 2026: nothing at Wed 05:00, 6 days
-    # after its Thursday game). A week where EVERY game answers 404 "Game not found" is not out
-    # yet: PENDING for up to 14 days after it went final, then a failure. Some games found and
-    # some not = a partial week = a failure at once (never loaded).
+    # FTN publishes all-22 days after the games, GAME BY GAME in no fixed order (2026 week 3:
+    # nothing at Wed 05:51, 6 days after its Thursday game; at 12:50 only the Monday game, 1/16).
+    # While any game still answers 404 "Game not found" the week is not out yet: PENDING for up
+    # to 14 days after it went final, then a failure. A partial week is NEVER loaded.
     publish_grace_days = 14
 
     def partition(self, scope):
@@ -220,11 +220,9 @@ class All22Loader(_FtnWeek):
                     continue
                 raise
             parts.append(f'"{gid}":'.encode() + body)
-        if missing and len(missing) == len(gids):
-            raise NotPublished(f"FTN answers 404 'Game not found' for all {len(gids)} games of {partition}")
         if missing:
-            raise api.FtnError(f"{partition}: partial all-22, FTN has {len(gids) - len(missing)}/{len(gids)} games "
-                               f"(missing gids {missing}); a partial week is never loaded")
+            raise NotPublished(f"FTN has published {len(gids) - len(missing)}/{len(gids)} games of {partition} "
+                               f"(404 'Game not found' for gids {missing}); a partial week is never loaded")
         return b"{" + b",".join(parts) + b"}", {"url": f"{api.API}/all22/game/<gid>", "gids": ",".join(map(str, gids))}
 
     def prepare(self, conn):
