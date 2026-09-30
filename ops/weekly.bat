@@ -1,6 +1,6 @@
 @echo off
 rem football_db v2 weekly job (REBUILD_DESIGN section 7). Run by Task Scheduler "FootballDB v2 Weekly":
-rem Wednesday 05:00, StartWhenAvailable (Turon 2026-09-30: MNF weeks settle ~Wed 00:15 ET). The 3.13 interpreter BY FULL PATH (bare python is 3.14, no Flask).
+rem HEADLESS (conhost --headless), Wednesday 05:00, StartWhenAvailable (Turon 2026-09-30: MNF weeks settle ~Wed 00:15 ET). The 3.13 interpreter BY FULL PATH (bare python is 3.14, no Flask).
 rem Output appends to data\logs\weekly.log; the result is also in PIPELINE_STATUS.json and the Discord alert.
 setlocal
 set PY="C:\Users\k-ble\AppData\Local\Programs\Python\Python313\python.exe"

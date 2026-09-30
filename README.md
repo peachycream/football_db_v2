@@ -25,7 +25,7 @@ MFL credentials (`MFL_USERNAME`, `MFL_PASSWORD`), `PFF_API_KEY` and `FTN_API_KEY
 Loaders are stdlib only (Python 3.11+): every nflverse asset is CSV/CSV.gz, so no pyarrow. The app needs Flask. On Windows use the 3.13 interpreter by full path (see `CLAUDE.md`).
 
 ## Operations (since Phase 8, 2026-09-29)
-v2 is the live system. Two Windows Task Scheduler tasks, both running as the logged-in user:
+v2 is the live system. Two Windows Task Scheduler tasks, both running as the logged-in user, **headless** (`conhost.exe --headless`, so there is no window to close by accident); the app restarts itself 10 s after any exit:
 
 | Task | When | Runs | Log |
 |---|---|---|---|
