@@ -202,6 +202,71 @@ export function dashboardSnaps(
   return getJSON<DashSnaps>(`${BASE}/api/dashboard/snaps?${u}`);
 }
 
+// ── Trinity Score (WR/TE/RB; DD Fantasy Football's formula, ported) ─────────
+export interface DashTrinityWeek {
+  week: number;
+  team: string;
+  position: string;
+  score: number;           // that week alone, against that week's WR/TE pool
+  tier: string;
+  rank: number;            // within position that week
+  targets: number;
+  rec: number;
+  rec_yards: number;
+  rec_td: number;
+}
+
+export interface DashTrinityThrough {
+  week: number;
+  position: string;
+  score: number;           // weeks 1..week together (season to date)
+  tier: string;
+  rank: number;
+  games: number;
+  targets: number;
+  rec: number;
+  rec_yards: number;
+  rec_td: number;
+  pool?: number;           // summary row only: players ranked at this position
+}
+
+export interface DashTrinityStored {
+  score: number;           // DD's own published season score (a different computation for some players)
+  tier: string | null;
+  rank: number | null;
+  team: string | null;
+  games: number | null;
+  ppg: number | null;
+}
+
+export interface DashTrinity {
+  player_id: string;
+  full_name: string | null;
+  position: string | null;
+  bucket: string | null;
+  season: number;
+  supported: boolean;      // WR / TE / RB only
+  first_season: number;    // DD's data starts here
+  has_data: boolean;
+  weekly: DashTrinityWeek[];
+  through: DashTrinityThrough[];
+  summary: DashTrinityThrough | null;
+  stored: DashTrinityStored | null;
+  withheld_weeks: number[]; // weeks DD's data is wrong at the source (never loaded)
+  bands: { label: string; min: number }[];  // tier thresholds, high to low
+}
+
+export function dashboardTrinity(
+  playerId: string,
+  season: number,
+): Promise<DashTrinity> {
+  const u = new URLSearchParams({
+    player_id: playerId,
+    season: String(season),
+  });
+  return getJSON<DashTrinity>(`${BASE}/api/dashboard/trinity?${u}`);
+}
+
 // ── Route tree (viz 2) ───────────────────────────────────────────────────────
 export interface DashRouteSpoke {
   key: string;

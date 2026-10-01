@@ -28,6 +28,7 @@ from datetime import date
 from flask import Blueprint, jsonify, request
 
 from fdb.scoring import STAT_EVENTS, Scorer, catch_all_rules
+from fdb.trinity import BANDS as TRINITY_BANDS
 from .matchups import _db
 
 bp = Blueprint("dashboard", __name__)
@@ -414,7 +415,7 @@ TILE_SPECS = {
         {"n": 6, "label": "Expected FP", "star": True, "kind": "expcount", "col": "rec_fantasy_points_exp", "fmt": "n1", "pctile": "compute"},
         {"n": 7, "star": True, **_WR_TE_COMMON["ays"]},
         {"n": 8, "label": "Route Grade", "star": True, "kind": "grade", "col": "grades_pass_route", "fmt": "grade", "pctile": "compute"},
-        {"n": 9, "label": "Inside-20 Tgts", **_count("rz_targets")},
+        {"n": 9, "label": "Trinity Score", "kind": "trinity", "fmt": "x2", "pctile": "compute"},
     ],
     "TE": [
         {"n": 1, "star": True, **_WR_TE_COMMON["ts"]},
@@ -519,6 +520,10 @@ def _value_map(conn, season, spec, pids, gmap, league_id):
         return q(f"SELECT gsis_id, SUM(cpoe * attempts) / NULLIF(SUM(attempts), 0) FROM mart_ngs_passing_week WHERE {reg} AND gsis_id IN ({ph}) GROUP BY gsis_id")
     if k == "grade":
         return q(f"SELECT gsis_id, {spec['col']} FROM mart_pff_offense_season WHERE season = ? AND gsis_id IN ({ph})")
+    if k == "trinity":   # season to date at the season's last scored week (fdb/trinity.py; DD's page formula, ported)
+        return dict(conn.execute(f"""SELECT gsis_id, trinity_score FROM mart_trinity_through_week
+                WHERE season = ? AND week = (SELECT MAX(week) FROM mart_trinity_through_week WHERE season = ?)
+                AND gsis_id IN ({ph})""", (season, season, *pids)).fetchall())
     if k == "routes":
         return per_game(q(f"SELECT gsis_id, SUM(routes) FROM mart_pff_receiving_week WHERE {reg} AND gsis_id IN ({ph}) GROUP BY gsis_id"))
     if k == "dgrade":
@@ -591,12 +596,77 @@ def tiles():
                 vmap = _value_map(conn, season, spec, list(pids), gmap, league_id)
                 pv = vmap.get(gsis)
                 pct = _percentile(pv, eligible, vmap, invert=bool(spec.get("invert"))) if gsis in eligible else None
-            out.append({"n": spec["n"], "label": spec["label"], "star": bool(spec.get("star")), "display": _fmt(pv, spec["fmt"]),
-                        "raw": pv, "sub": None, "percentile": pct, "per_game": spec["kind"] in _PER_GAME,
+            display, sub_note = _fmt(pv, spec["fmt"]), None
+            if spec["kind"] == "trinity":
+                display, sub_note = _trinity_tile(conn, season, gsis, pv, display)
+            out.append({"n": spec["n"], "label": spec["label"], "star": bool(spec.get("star")), "display": display,
+                        "raw": pv, "sub": sub_note, "percentile": pct, "per_game": spec["kind"] in _PER_GAME,
                         "league_dep": bool(spec.get("league_dep")), "warn": bool(spec.get("warn"))})
         return jsonify({"player_id": gsis, "full_name": prow["full_name"], "position": label, "bucket": bucket, "side": side,
                         "team": prow["team"], "season": season, "league_id": league_id, "games": gmap.get(gsis),
                         "pool_size": len(eligible), "tiles": out})
+    finally:
+        conn.close()
+
+
+# ── Trinity ─────────────────────────────────────────────────────────────────
+TRINITY_FIRST_SEASON = 2021     # where DD's Trinity data starts (fdb/loaders/ddff.py)
+
+
+def _trinity_tile(conn, season, gsis, pv, display):
+    """-> (display, sub) for the Trinity tile: the tier and rank, and which week the season-to-date reaches."""
+    if season < TRINITY_FIRST_SEASON:
+        return "—", f"Trinity data starts in {TRINITY_FIRST_SEASON}"
+    if pv is None:
+        return display, "below DD's target floor: no Trinity score"
+    r = conn.execute("""SELECT tier, position, position_rank, week FROM mart_trinity_through_week
+                        WHERE gsis_id = ? AND season = ? ORDER BY week DESC LIMIT 1""", (gsis, season)).fetchone()
+    return display, (f"{r['tier']} · {r['position']}{r['position_rank']} · thru wk {r['week']}" if r else None)
+
+
+@bp.route("/api/dashboard/trinity")
+def trinity_panel():
+    """Trinity Score for WR/TE/RB: the weekly series, season to date, DD's own stored season score,
+    and the weeks DD's data is withheld for (REBUILD_LOG Phase 9). The score is DD's page formula
+    ported (fdb/trinity.py), a derived number: the stored score is DD's published one and can differ."""
+    gsis = (request.args.get("player_id") or "").strip()
+    if not gsis:
+        return jsonify({"error": "player_id required"}), 400
+    conn = _db()
+    try:
+        season = _season_arg() or _default_season(conn)
+        prow = conn.execute("SELECT * FROM mart_player_profile WHERE gsis_id = ?", (gsis,)).fetchone()
+        if prow is None:
+            return jsonify({"error": "player not found"}), 404
+        side, bucket, label = player_position(conn, gsis, season)
+        out = {"player_id": gsis, "full_name": prow["full_name"], "position": label, "bucket": bucket, "season": season,
+               "supported": bucket in ("WR", "TE", "RB"), "first_season": TRINITY_FIRST_SEASON, "has_data": False,
+               "weekly": [], "through": [], "summary": None, "stored": None, "withheld_weeks": [], "bands": []}
+        if not out["supported"] or season < TRINITY_FIRST_SEASON:
+            return jsonify(out)
+        out["weekly"] = [dict(r) for r in conn.execute("""SELECT week, team, position, trinity_score AS score, tier,
+                position_rank AS rank, targets, rec, rec_yards, rec_td FROM mart_trinity_week
+                WHERE gsis_id = ? AND season = ? ORDER BY week""", (gsis, season))]
+        out["through"] = [dict(r) for r in conn.execute("""SELECT week, position, trinity_score AS score, tier,
+                position_rank AS rank, games, targets, rec, rec_yards, rec_td FROM mart_trinity_through_week
+                WHERE gsis_id = ? AND season = ? ORDER BY week""", (gsis, season))]
+        out["has_data"] = bool(out["weekly"] or out["through"])
+        if out["through"]:
+            last = dict(out["through"][-1])
+            last["pool"] = conn.execute("""SELECT COUNT(*) FROM mart_trinity_through_week
+                    WHERE season = ? AND week = ? AND position = ?""", (season, last["week"], last["position"])).fetchone()[0]
+            out["summary"] = last
+        # Weeks the league played that DD's data does not cover (a source defect, withheld by the loader).
+        present = {r[0] for r in conn.execute("SELECT DISTINCT week FROM mart_trinity_week WHERE season = ?", (season,))}
+        played = {r[0] for r in conn.execute("""SELECT DISTINCT week FROM mart_team_week_opponent WHERE season = ?
+                AND season_type = 'REG' AND week <= 17 AND team_score IS NOT NULL""", (season,))}
+        out["withheld_weeks"] = sorted(played - present) if present else []
+        st = conn.execute("""SELECT trinity_score AS score, tier, rank, team, games, ppg FROM mart_trinity_season_stored
+                             WHERE gsis_id = ? AND season = ?""", (gsis, season)).fetchone()
+        out["stored"] = dict(st) if st else None
+        pos = (out["summary"] or (out["weekly"][-1] if out["weekly"] else {})).get("position") or label
+        out["bands"] = [{"label": b, "min": m} for b, m in TRINITY_BANDS["TE" if pos == "TE" else "WR"]]   # RB use the WR bands
+        return jsonify(out)
     finally:
         conn.close()
 

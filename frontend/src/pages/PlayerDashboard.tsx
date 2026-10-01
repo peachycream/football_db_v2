@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils';
 import { useDebounce } from '@/hooks/useDebounce';
 import { Field, Popover, Button } from '@/components/ui/primitives';
 import SnapTrend from '@/components/SnapTrend';
+import TrinityTrend from '@/components/TrinityTrend';
 import RouteTree from '@/components/RouteTree';
 import QbPassingProfile from '@/components/QbPassingProfile';
 import RbRushingProfile from '@/components/RbRushingProfile';
@@ -428,6 +429,11 @@ export default function PlayerDashboard() {
                     playerId={selected.player_id}
                     season={season}
                     side={selected.side}
+                  />
+                  <TrinityTrend
+                    playerId={selected.player_id}
+                    season={season}
+                    bucket={selected.bucket}
                   />
                 </div>
               </div>
