@@ -131,6 +131,8 @@ Checked in as `registry/sources.yaml` and enforced by the loader framework: a lo
 | `core_pff_blocking_week` | PFF `offense/blocking` | player-week | 2016– | Team Offense O-line grade |
 | `core_pff_coverage_scheme_week` | PFF `defense/coverage_scheme` | player-week | 2016– | Team Defense man/zone |
 | `core_pff_grades_season` | PFF `offense/summary` + `defense/summary` with **`week=1,…,18,28,29,30,32`** | player-season | 2016– | Team Defense grades |
+| `core_trinity_ftn_aggregates` | DD Fantasy Football RPC `trinity_ftn_aggregates_weeks`, one week per call (Phase 9) | player-week | 2021– (REG 1–17) | `mart_trinity_*` |
+| `core_trinity_scores` | DD `gated_trinity_scores`, closed seasons (Phase 9) | player-season | 2021– | cross-check of the ported score |
 | `core_fantasy_leagues`, `_franchises`, `_scoring_rules` | MFL API / Sleeper API | league-season | 2026 (+2025) | Matchups scoring, Ownership |
 | `core_fantasy_rosters` | MFL `rosters` / Sleeper `rosters`, **snapshot rows with `snapshot_at`** | roster slot | current | Ownership |
 | `core_fantasy_scores` | MFL `playerScores` (reported) | player-week-league | 2025– | IDP calibration truth |
@@ -141,7 +143,7 @@ Notes that are decisions, not details:
 - **Participation is the one planned two-source seam.** nflverse stops at 2025 ("Season must be between 2016 and 2025"), and only FTN has 2026. The row carries `source`. **Phase 5 must run a seam test on the 2021–2025 overlap** (personnel distribution per team-season within a tolerance) before accepting the seam. It must also handle FTN's 2021 `TE` vs 2022+ `Y-TE`/`H-TE` vocabulary change, which v1 hit silently.
 - **PFF is always weekly** except for grades. Season totals are **summed from weekly rows** (counts only), so preseason can never get in: the week vocabulary has no preseason weeks. Grades are the exception because PFF grades are not additive, which is why that one table uses the `week=<list>` server-side aggregate.
 - **User-entered app state** (wishlist, tiers, `my_entry_id`) is the only data that isn't rebuildable from raw. It lives in `app_*` tables, and `fdb rebuild` **exports and re-imports it**. It is also dumped to a checked-in `app_state/*.csv` so it survives a rebuild. `gameday_config.json`'s "who am I in each league" becomes `config/my_franchises.yaml` in git.
-- **Not in v1:** FTN full charting (`/coverage/`), projections, Trinity, route studies, CFB, draft tools, PFF season summary tables. Each is its own later phase with its own owner row here.
+- **Not in v1:** FTN full charting (`/coverage/`), projections, route studies, CFB, draft tools, PFF season summary tables. Each is its own later phase with its own owner row here. (Trinity was built as Phase 9, 2026-10-01: rows above; the weekly score is DD's page formula ported into `mart_trinity_*`.)
 
 ---
 

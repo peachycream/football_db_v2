@@ -1,0 +1,17 @@
+# Recorded from a live trinity_ftn_aggregates_weeks response 2026-10-01 (2025, week 1: 316 rows). Every field was
+# present and non-null in every row; types: ids/text are strings, the rest numbers. A missing field fails the load.
+player_gsis_id
+full_name
+pos
+sleeper_id
+team
+games
+routes
+targets
+rec
+rec_yards
+yac
+rec_td
+first_downs
+player_air_yards
+team_air_yards

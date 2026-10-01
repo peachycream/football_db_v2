@@ -403,6 +403,37 @@ name = "mart_idp_sack_rates"
 owner = "idp_model.build"
 kind = "builder"
 
+# DD Fantasy Football Trinity (fdb/ddff.py; member login in .env). 2021+, REG weeks 1-17: where the site's pickers start/stop.
+[[table]]
+name = "core_trinity_ftn_aggregates"
+owner = "ddff.trinity_aggregates"
+source = "ddfantasyfootball.com RPC trinity_ftn_aggregates_weeks, one week per call"
+grain = "week"
+seasons = "2021-"
+weekly = true
+note = "the weekly FTN counts DD's page computes Trinity from; sleeper_id + gsis id on every row"
+
+[[table]]
+name = "core_trinity_scores"
+owner = "ddff.trinity_scores"
+source = "ddfantasyfootball.com RPC gated_trinity_scores"
+grain = "season"
+seasons = "2021-"
+weekly = true
+note = "DD's stored season score, closed seasons only (the live season is computed in mart_trinity_*)"
+
+[[table]]
+name = "mart_trinity_week"
+owner = "trinity.build"
+kind = "builder"
+note = "Trinity Score per player-week, DD's page formula ported (fdb/trinity.py); derived, not a source field"
+
+[[table]]
+name = "mart_trinity_through_week"
+owner = "trinity.build"
+kind = "builder"
+note = "the same score over weeks 1..week (season to date)"
+
 [[table]]
 name = "my_franchises"
 owner = "fantasy.config"
