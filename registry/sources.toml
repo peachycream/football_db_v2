@@ -373,6 +373,11 @@ owner = "dashboard.build"
 kind = "builder"
 
 [[table]]
+name = "mart_player_routes_week"
+owner = "dashboard.build"
+kind = "builder"
+
+[[table]]
 name = "mart_idp_expected_tackles_week"
 owner = "idp_model.build"
 kind = "builder"

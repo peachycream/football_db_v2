@@ -66,6 +66,33 @@ class Marts(unittest.TestCase):
         self.assertEqual(builder.checks(c), [])
 
 
+class Routes(unittest.TestCase):
+    """Route tree from FTN per-play routes (2026-10-01)."""
+
+    def test_counted_plays_targets_and_catches(self):
+        with TempEnv() as t:
+            c = t.conn()
+            c.execute("PRAGMA foreign_keys = OFF")
+            plays = [(1, "PASS", "00-WR", 1, 12), (2, "PASS", "00-TE", 0, 0), (3, "RUSH", None, 0, 4), (4, "NOPL", "00-WR", 1, 30)]
+            c.executemany("""INSERT INTO core_ftn_plays (season, season_type, week, pid, type, trg, comp, yds, load_id)
+                             VALUES (2026, 'REG', 1, ?, ?, ?, ?, ?, 1)""", plays)
+            for pid in (1, 2, 3, 4):
+                c.execute("""INSERT INTO core_ftn_participation (season, season_type, week, pid, skp1, route1, skp2, route2, load_id)
+                             VALUES (2026, 'REG', 1, ?, '00-WR', '7 - Post', '00-TE', '3 - Hitch/Curl', 1)""", (pid,))
+            c.execute(builder.PLAYER_ROUTES)
+            got = {(g, r): (n, tg, rc, y) for g, r, n, tg, rc, y in c.execute(
+                "SELECT gsis_id, route, routes, targets, receptions, rec_yards FROM mart_player_routes_week")}
+            # the scramble (RUSH) counts as a route run, the no-play does not; yards only on his catches
+            self.assertEqual(got[("00-WR", "7 - Post")], (3, 1, 1, 12))
+            self.assertEqual(got[("00-TE", "3 - Hitch/Curl")], (3, 1, 0, 0))
+            c.close()
+
+    def test_spokes_cover_ftns_vocabulary_once(self):
+        ftn = [f"{i} - {n}" for i, n in enumerate(["Screen", "Slant", "Quick Out", "Hitch/Curl", "Deep Out", "In/Dig", "Corner",
+                                                    "Post", "Shallow Cross/Drag", "Go", "Swing", "Texas/Angle", "Wheel"])]
+        self.assertEqual(sorted(s[0] for s in d.ROUTE_SPOKES), sorted(ftn))
+        self.assertEqual(len({s[1] for s in d.ROUTE_SPOKES}), 13)
+
 class Positions(unittest.TestCase):
     def test_label_maps(self):
         self.assertEqual(d._bucket("SAF"), ("defense", "S"))

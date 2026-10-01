@@ -31,7 +31,7 @@ v2 is the live system. Three Windows Task Scheduler tasks, all running as the lo
 |---|---|---|---|
 | `FootballDB v2 Weekly` | Wednesday 05:00, catches up if missed (StartWhenAvailable), 3 h limit | `ops\weekly.bat` → `python -m fdb weekly` (3.13 by full path) | `data\logs\weekly.log`, `PIPELINE_STATUS.json` |
 | `FootballDB v2 App` | at logon | `ops\start_app.bat` → the web app on http://127.0.0.1:5000/ | `data\logs\app.log` |
-| `FootballDB v2 Rosters` | daily 06:00, catches up if missed | `ops\daily_rosters.bat` → `python -m fdb update mfl.rosters --apply` (a new snapshot per MFL league; /ownership/ reads the latest) | `data\logs\rosters.log` |
+| `FootballDB v2 Rosters` | daily 06:00, catches up if missed | `ops\daily_rosters.bat` → `fdb update mfl.rosters` then `fdb update sleeper.rosters` (a new snapshot per league; /ownership/ reads the latest) | `data\logs\rosters.log` |
 
 Ops alerts go to Discord only once `OPS_DISCORD_WEBHOOK=https://discord.com/api/webhooks/...` is in `.env`; then run `python -m fdb weekly --test-alert` to confirm.
 

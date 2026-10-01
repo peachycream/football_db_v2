@@ -4,6 +4,8 @@
     mart_qb_dropback_week     QB dropback sums        (v1 ingest_qb_pass_zones_v1, same filters)
     mart_qb_pass_zones_week   QB zone sums            (v1 ingest_qb_pass_zones_v1)
     mart_rb_run_lanes_week    RB lane sums            (v1 ingest_rb_run_lanes_v1)
+    mart_player_routes_week   route tree: routes / targets / catches / yards per route type
+                              (FTN participation, 2026-; v1's FPD route file has no successor)
 
 All four are rebuilt wholly from core in one transaction (delete, insert, check, commit or
 roll back). Every season_type is built; the app reads REG, as v1 did. Differences from v1:
@@ -85,7 +87,22 @@ FROM (SELECT *, CASE WHEN run_location = 'middle' THEN 'M'
 WHERE lane IS NOT NULL
 GROUP BY 1, 2, 3, 4, 5"""
 
-TABLES = ("mart_player_week", "mart_qb_dropback_week", "mart_qb_pass_zones_week", "mart_rb_run_lanes_week")
+_SLOTS = " UNION ALL ".join(
+    f"SELECT x.season, x.season_type, x.week, x.pid, x.skp{i} AS gsis_id, x.route{i} AS route FROM core_ftn_participation x "
+    f"WHERE x.skp{i} IS NOT NULL AND x.route{i} IS NOT NULL" for i in range(1, 6))
+
+PLAYER_ROUTES = f"""
+INSERT INTO mart_player_routes_week
+SELECT r.season, r.season_type, r.week, r.gsis_id, r.route,
+       COUNT(*), SUM(CASE WHEN p.trg = r.gsis_id THEN 1 ELSE 0 END),
+       SUM(CASE WHEN p.trg = r.gsis_id AND p.comp = 1 THEN 1 ELSE 0 END),
+       COALESCE(SUM(CASE WHEN p.trg = r.gsis_id AND p.comp = 1 THEN p.yds END), 0)
+FROM ({_SLOTS}) r
+JOIN core_ftn_plays p ON p.pid = r.pid AND p.type IN ('PASS', 'RUSH')   -- RUSH: scrambles etc.; no-plays excluded
+GROUP BY 1, 2, 3, 4, 5"""
+
+TABLES = ("mart_player_week", "mart_qb_dropback_week", "mart_qb_pass_zones_week", "mart_rb_run_lanes_week",
+          "mart_player_routes_week")
 
 
 def checks(conn) -> list[str]:
@@ -123,6 +140,14 @@ def checks(conn) -> list[str]:
                   AND qb_scramble = 0 AND rusher_player_id IS NOT NULL GROUP BY 1) r ON r.season = l.season"""):
         if lanes < 0.90 * runs:
             fails.append(f"{s}: lanes hold {lanes}/{runs} designed runs")
+    # route targets agree with nflverse targets for every route-charted week (FTN vs nflverse, within 2%)
+    for s, st, w, a, b in conn.execute("""
+            SELECT r.season, r.season_type, r.week, r.t, n.t FROM
+              (SELECT season, season_type, week, SUM(targets) t FROM mart_player_routes_week GROUP BY 1, 2, 3) r
+              JOIN (SELECT season, season_type, week, SUM(targets) t FROM core_player_stats GROUP BY 1, 2, 3) n
+                ON n.season = r.season AND n.season_type = r.season_type AND n.week = r.week"""):
+        if not 0.95 * b <= a <= 1.02 * b:
+            fails.append(f"{s} {st}{w}: route-tree targets {a} vs nflverse {b}")
     bad = conn.execute("SELECT COUNT(*) FROM mart_qb_dropback_week WHERE completions > attempts OR attempts > dropbacks "
                        "OR cpoe_attempts > attempts").fetchone()[0]
     if bad:
@@ -135,7 +160,7 @@ def build(conn) -> dict:
     try:
         for t in TABLES:
             conn.execute(f"DELETE FROM {t}")
-        for sql in (PLAYER_WEEK, QB_DROPBACK, QB_ZONES, RB_LANES):
+        for sql in (PLAYER_WEEK, QB_DROPBACK, QB_ZONES, RB_LANES, PLAYER_ROUTES):
             conn.execute(sql)
         counts = {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in TABLES}
         fails = checks(conn)

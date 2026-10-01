@@ -11,7 +11,7 @@ The player key is the gsis id (v1: a name slug). What changed, each deliberate:
     moved from S to LB was pooled as an LB in years he played safety).
   * Retired v1 sources are not carried (REBUILD_DESIGN §8 7a): FPD receiving (WR/TE
     target share, air-yards share, inside-20 targets) is replaced by nflverse; the
-    FPD route tree has no successor, so /routes answers has_data = false.
+    route tree comes from FTN's per-play routes (2026-), and seasons without them hide it.
   * Passer rating is the NFL formula on REG totals and CPOE is NGS's weekly CPOE
     weighted by attempts (v1 read NGS's season row, which v2's loader does not keep).
   * Expected tackles/sacks are v2's own model (§6.1, fdb/idp_model.py), never the
@@ -634,10 +634,24 @@ def snaps():
         conn.close()
 
 
+# Route tree: FTN's 13 route types, ordered around the wheel short -> deep the way v1's 12 FPD
+# spokes were. Display labels are shortened where FTN's name clipped at the panel edge
+# (Shallow Cross/Drag -> Drag, Hitch/Curl -> Hitch, Texas/Angle -> Angle); the data keeps FTN's.
+ROUTE_SPOKES = [("0 - Screen", "screen", "Screen"), ("10 - Swing", "swing", "Swing"),
+                ("8 - Shallow Cross/Drag", "cross", "Drag"), ("1 - Slant", "slant", "Slant"),
+                ("2 - Quick Out", "quick_out", "Quick Out"), ("3 - Hitch/Curl", "hitch", "Hitch"),
+                ("11 - Texas/Angle", "angle", "Angle"), ("5 - In/Dig", "in_dig", "In/Dig"),
+                ("4 - Deep Out", "deep_out", "Deep Out"), ("6 - Corner", "corner", "Corner"),
+                ("7 - Post", "post", "Post"), ("12 - Wheel", "wheel", "Wheel"), ("9 - Go", "go", "Go")]
+
+
 @bp.route("/api/dashboard/routes")
 def routes():
-    """v1's route tree read FPD's per-route weekly file, a retired source that v2 does not
-    carry (REBUILD_DESIGN §8 7a). Same shape, has_data false: the page hides the panel."""
+    """Route tree, v1's JSON shape. v1 read FPD's per-route weekly file (retired); v2 reads FTN's
+    per-play routes (mart_player_routes_week, 2026-), REG only like the rest of the page.
+    routes / targets / TPRR / YPRR per route type are real; FPD's proprietary win rate,
+    separation score and ADOR have no FTN equivalent and are null (the page omits them).
+    Seasons FTN did not chart routes for answer has_data false, so the panel hides."""
     gsis = (request.args.get("player_id") or "").strip()
     if not gsis:
         return jsonify({"error": "player_id required"}), 400
@@ -648,8 +662,30 @@ def routes():
         if prow is None:
             return jsonify({"error": "player not found"}), 404
         side, bucket, label = player_position(conn, gsis, season)
-        return jsonify({"player_id": gsis, "full_name": prow["full_name"], "position": label, "bucket": bucket, "side": side,
-                        "season": season, "has_data": False, "total_routes": 0, "total_targets": 0, "weeks": 0, "spokes": []})
+        out = {"player_id": gsis, "full_name": prow["full_name"], "position": label, "bucket": bucket, "side": side,
+               "season": season, "has_data": False, "total_routes": 0, "total_targets": 0, "weeks": 0, "spokes": []}
+        if bucket not in ("WR", "TE", "RB"):
+            return jsonify(out)   # receivers only, as v1
+        rows = {r["route"]: r for r in conn.execute("""SELECT route, SUM(routes) routes, SUM(targets) targets,
+                SUM(receptions) receptions, SUM(rec_yards) rec_yards FROM mart_player_routes_week
+                WHERE gsis_id = ? AND season = ? AND season_type = 'REG' GROUP BY route""", (gsis, season))}
+        total = sum(r["routes"] for r in rows.values())
+        if total <= 0:
+            return jsonify(out)
+        spokes = []
+        for ftn, key, lab in ROUTE_SPOKES:
+            r = rows.get(ftn)
+            n = r["routes"] if r else 0
+            spokes.append({"key": key, "label": lab, "routes": n, "mix_pct": round(100 * n / total, 1),
+                           "targets": float(r["targets"]) if r else 0.0,
+                           "yprr": round(r["rec_yards"] / n, 2) if n else None,
+                           "tprr": round(r["targets"] / n, 3) if n else None,
+                           "win_rate": None, "sep_score": None, "ador": None})
+        weeks = conn.execute("""SELECT COUNT(DISTINCT week) FROM mart_player_routes_week WHERE gsis_id = ? AND season = ?
+                                AND season_type = 'REG'""", (gsis, season)).fetchone()[0]
+        out.update(has_data=True, total_routes=total, total_targets=sum(r["targets"] for r in rows.values()),
+                   weeks=weeks, spokes=spokes)
+        return jsonify(out)
     finally:
         conn.close()
 
