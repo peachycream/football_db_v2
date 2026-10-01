@@ -1,0 +1,249 @@
+import { useMemo } from 'react';
+import type { Dispatch } from 'react';
+import type { StatMeta, Dot, SeasonsResponse } from '@/types/api';
+import type { AppState, Action } from '@/state/queryState';
+import { Field, Toggle, Segmented } from '@/components/ui/primitives';
+import { GranularityToggle } from '@/components/controls/GranularityToggle';
+import { YearChips } from '@/components/controls/YearChips';
+import { PositionPicker } from '@/components/controls/PositionPicker';
+import { TeamPicker } from '@/components/controls/TeamPicker';
+import { StatPicker } from '@/components/controls/StatPicker';
+import { ThresholdSlider } from '@/components/controls/ThresholdSlider';
+import { PersonnelFilter } from '@/components/controls/PersonnelFilter';
+import { PlayerHighlight } from '@/components/controls/PlayerHighlight';
+import { groupLabel, isWeeklySource } from '@/lib/constants';
+import type { TrendlineMode } from '@/state/queryState';
+
+interface SidebarProps {
+  registry: StatMeta[];
+  seasons: SeasonsResponse | null;
+  state: AppState;
+  dispatch: Dispatch<Action>;
+  /** Players currently on the chart — feeds the highlight search */
+  visibleDots: Dot[];
+}
+
+export function Sidebar({
+  registry, seasons, state, dispatch, visibleDots,
+}: SidebarProps) {
+  const { config, showQuadrants, highlights } = state;
+
+  const xMeta = useMemo(
+    () => registry.find(s => s.stat_id === config.x_stat) ?? null,
+    [registry, config.x_stat],
+  );
+  const yMeta = useMemo(
+    () => registry.find(s => s.stat_id === config.y_stat) ?? null,
+    [registry, config.y_stat],
+  );
+
+  // Source tables driving year availability — X and Y stats
+  const activeTables = useMemo(() => {
+    const t: string[] = [];
+    if (xMeta) t.push(xMeta.source_table);
+    if (yMeta && yMeta.source_table !== xMeta?.source_table) t.push(yMeta.source_table);
+    return t;
+  }, [xMeta, yMeta]);
+
+  // Allowed positions for the current X+Y pair (intersection)
+  const allowedPositions = useMemo(() => {
+    if (!xMeta) return null;
+    if (!yMeta) return xMeta.positions;
+    return xMeta.positions.filter(p => yMeta.positions.includes(p));
+  }, [xMeta, yMeta]);
+
+  return (
+    <aside className="w-96 shrink-0 border-r border-border bg-bg-card flex flex-col h-full">
+      <div className="px-4 py-3 border-b border-border">
+        <h2 className="text-sm font-semibold text-text">Controls</h2>
+        <p className="text-[10px] text-text-dim mt-0.5">
+          {registry.length} stats available
+        </p>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
+
+        {/* Granularity */}
+        <Field label="Granularity">
+          <GranularityToggle
+            value={config.granularity}
+            onChange={(g) => dispatch({ type: 'set_granularity', value: g })}
+          />
+        </Field>
+
+        {/* Week mode (and its WeekPicker) lands in chunk 4b. The Week
+            granularity option is disabled in GranularityToggle until then. */}
+
+        {/* X / Y stats — at the top because they drive everything else */}
+        <Field
+          label="X axis"
+          hint={xMeta ? groupLabel(xMeta.source_group) : undefined}
+        >
+          <StatPicker
+            stats={registry}
+            value={config.x_stat}
+            onChange={(id) => dispatch({ type: 'set_x_stat', value: id })}
+            placeholder="Pick X stat"
+            filterPositions={config.positions.length ? config.positions : undefined}
+          />
+        </Field>
+
+        <Field
+          label="Y axis"
+          hint={
+            xMeta && yMeta && xMeta.source_table !== yMeta.source_table
+              ? 'cross-source'
+              : undefined
+          }
+        >
+          <StatPicker
+            stats={registry}
+            value={config.y_stat}
+            onChange={(id) => dispatch({ type: 'set_y_stat', value: id })}
+            placeholder="Pick Y stat"
+            filterPositions={config.positions.length ? config.positions : undefined}
+          />
+        </Field>
+
+        {/* Color & Size */}
+        <Field label="Color">
+          <StatPicker
+            stats={registry}
+            value={config.color_stat}
+            onChange={(id) => dispatch({ type: 'set_color_stat', value: id })}
+            placeholder="(optional)"
+            clearable
+          />
+        </Field>
+
+        <Field label="Size">
+          <StatPicker
+            stats={registry}
+            value={config.size_stat}
+            onChange={(id) => dispatch({ type: 'set_size_stat', value: id })}
+            placeholder="(optional)"
+            continuousOnly
+            clearable
+          />
+        </Field>
+
+        {/* Years */}
+        <Field
+          label={config.granularity === 'career' ? 'Seasons to include' : 'Seasons'}
+          hint={
+            config.granularity === 'career'
+              ? `${config.seasons.length} aggregated`
+              : `${config.seasons.length} selected`
+          }
+        >
+          <YearChips
+            selected={config.seasons}
+            onToggle={(y) => dispatch({ type: 'toggle_season', value: y })}
+            onSetAll={(ys) => dispatch({ type: 'set_seasons', value: ys })}
+            seasonsByTable={seasons?.by_table ?? {}}
+            activeTables={activeTables}
+            hideShortcuts={config.granularity === 'career'}
+          />
+        </Field>
+
+        {/* Positions */}
+        <Field label="Positions" hint={config.positions.length ? `${config.positions.length} on` : 'any'}>
+          <PositionPicker
+            selected={config.positions}
+            onToggle={(p) => dispatch({ type: 'toggle_position', value: p })}
+            allowedPositions={allowedPositions ?? undefined}
+          />
+        </Field>
+
+        {/* Teams */}
+        <Field label="Teams">
+          <TeamPicker
+            selected={config.teams}
+            onToggle={(t) => dispatch({ type: 'toggle_team', value: t })}
+            onSet={(ts) => dispatch({ type: 'set_teams', value: ts })}
+            onClear={() => dispatch({ type: 'clear_teams' })}
+          />
+        </Field>
+
+        {/* Threshold */}
+        <Field
+          label="Min threshold"
+          hint={xMeta?.threshold_column ?? undefined}
+        >
+          <ThresholdSlider
+            xStat={xMeta}
+            value={config.min_threshold}
+            onChange={(v) => dispatch({ type: 'set_threshold', value: v })}
+            granularity={config.granularity}
+          />
+        </Field>
+
+        {/* Personnel — only available for weekly source tables */}
+        <Field
+          label="Personnel group"
+          hint={
+            !isWeeklySource(xMeta?.source_table)
+              ? 'weekly stats only'
+              : config.personnel_group
+                ? `≥ ${config.personnel_min_pct ?? 50}% of snaps`
+                : undefined
+          }
+        >
+          <PersonnelFilter
+            group={config.personnel_group}
+            minPct={config.personnel_min_pct}
+            onSetGroup={(g) => dispatch({ type: 'set_personnel_group', value: g })}
+            onSetMinPct={(p) => dispatch({ type: 'set_personnel_min_pct', value: p })}
+            disabled={!isWeeklySource(xMeta?.source_table)}
+            disabledReason="Personnel filter is only available for weekly source tables (game logs, NGS, snap counts, FF opportunity)."
+          />
+        </Field>
+
+        {/* Display */}
+        <Field label="Display">
+          <div className="flex flex-col gap-3">
+            <Toggle
+              checked={showQuadrants}
+              onChange={() => dispatch({ type: 'toggle_quadrants' })}
+              label="Median quadrant lines"
+            />
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] text-text-dim">Trendline</span>
+              <Segmented<TrendlineMode>
+                value={state.trendline}
+                onChange={(m) => dispatch({ type: 'set_trendline', value: m })}
+                items={[
+                  { value: 'off', label: 'Off' },
+                  { value: 'global', label: 'Global' },
+                  {
+                    value: 'per_group',
+                    label: 'Per group',
+                    disabled: state.config.color_stat == null,
+                    title: state.config.color_stat == null
+                      ? 'Select a categorical color stat to enable'
+                      : undefined,
+                  },
+                ]}
+              />
+            </div>
+          </div>
+        </Field>
+
+        {/* Highlights */}
+        <Field
+          label="Highlight players"
+          hint={highlights.length > 0 ? `${highlights.length}/3` : 'up to 3'}
+        >
+          <PlayerHighlight
+            dots={visibleDots}
+            highlights={highlights}
+            onAdd={(h) => dispatch({ type: 'add_highlight', value: h })}
+            onRemove={(id) => dispatch({ type: 'remove_highlight', value: id })}
+            onClear={() => dispatch({ type: 'clear_highlights' })}
+          />
+        </Field>
+
+      </div>
+    </aside>
+  );
+}

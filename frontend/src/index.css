@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    @apply h-full bg-bg text-text font-sans antialiased;
+  }
+  body {
+    margin: 0;
+    min-height: 100vh;
+  }
+
+  /* Matches the server-rendered shell: a whisper of the accent in the ground.
+     4% at the top only -- enough to feel, not enough to tint a screenshot or
+     fight a chart. Fixed so it never scrolls away.
+     NOTE: these routes do not receive the per-tool family accent (theme.py
+     accent_style() only wraps server-rendered pages), so this is always the
+     default accent here. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0 0 auto 0;
+    height: 420px;
+    pointer-events: none;
+    z-index: 0;
+    background: radial-gradient(120% 100% at 50% 0%,
+                rgb(var(--accent-rgb) / 0.04) 0%, transparent 70%);
+  }
+  #root { position: relative; z-index: 1; }
+
+  /* Keyboard focus. :focus-visible rather than :focus so the ring shows for
+     keyboard users without firing on every mouse click. The ring is defined
+     in theme.css and follows the per-tool accent. */
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [tabindex]:focus-visible {
+    outline: none;
+    box-shadow: var(--ring);
+    border-radius: 6px;
+  }
+}
+
+/* Honour the OS setting: every transition in this app is decorative. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Plotly default theme overrides for dark mode */
+.js-plotly-plot .plotly .modebar {
+  background-color: transparent !important;
+}
+.js-plotly-plot .plotly .modebar-btn path {
+  fill: var(--tx-mut) !important;
+}
+.js-plotly-plot .plotly .modebar-btn:hover path {
+  fill: var(--accent) !important;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--surf-1);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--edge);
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--surf-3);
+}

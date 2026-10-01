@@ -25,12 +25,13 @@ MFL credentials (`MFL_USERNAME`, `MFL_PASSWORD`), `PFF_API_KEY` and `FTN_API_KEY
 Loaders are stdlib only (Python 3.11+): every nflverse asset is CSV/CSV.gz, so no pyarrow. The app needs Flask. On Windows use the 3.13 interpreter by full path (see `CLAUDE.md`).
 
 ## Operations (since Phase 8, 2026-09-29)
-v2 is the live system. Two Windows Task Scheduler tasks, both running as the logged-in user, **headless** (`conhost.exe --headless`, so there is no window to close by accident); the app restarts itself 10 s after any exit:
+v2 is the live system. Three Windows Task Scheduler tasks, all running as the logged-in user, **headless** (`conhost.exe --headless`, so there is no window to close by accident); the app restarts itself 10 s after any exit:
 
 | Task | When | Runs | Log |
 |---|---|---|---|
 | `FootballDB v2 Weekly` | Wednesday 05:00, catches up if missed (StartWhenAvailable), 3 h limit | `ops\weekly.bat` → `python -m fdb weekly` (3.13 by full path) | `data\logs\weekly.log`, `PIPELINE_STATUS.json` |
 | `FootballDB v2 App` | at logon | `ops\start_app.bat` → the web app on http://127.0.0.1:5000/ | `data\logs\app.log` |
+| `FootballDB v2 Rosters` | daily 06:00, catches up if missed | `ops\daily_rosters.bat` → `python -m fdb update mfl.rosters --apply` (a new snapshot per MFL league; /ownership/ reads the latest) | `data\logs\rosters.log` |
 
 Ops alerts go to Discord only once `OPS_DISCORD_WEBHOOK=https://discord.com/api/webhooks/...` is in `.env`; then run `python -m fdb weekly --test-alert` to confirm.
 
@@ -39,3 +40,12 @@ Ops alerts go to Discord only once `OPS_DISCORD_WEBHOOK=https://discord.com/api/
 Disable-ScheduledTask -TaskName 'FootballDB v2 Weekly'; Disable-ScheduledTask -TaskName 'FootballDB v2 App'
 'FootballDB Weekly Capture All','FootballDB Matchup Refresh','FootballDB Weekly NFL Capture','FootballDB Weekly Env Capture' | ForEach-Object { Enable-ScheduledTask -TaskName $_ }
 ```
+
+## Frontend (the React pages under `/viz/*` and `/matchups/`)
+Source: `frontend/` (moved from v1 2026-09-30; v2 now owns it). The build is served from `app/static/viz/`.
+```
+cd frontend
+npx vite build
+node copy-to-flask.mjs
+```
+`frontend/node_modules` is a directory junction to v1's installed packages (`C:\Users\k-ble\Desktop\football_db\frontend\node_modules`), so nothing is downloaded. `npm run build` also runs `tsc -b`, which fails on a type error v1 already had (the "Capture PNG" button imports html2canvas from a URL); `vite build` alone reproduces the served bundle exactly.

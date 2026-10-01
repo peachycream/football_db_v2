@@ -1,0 +1,220 @@
+// Dashboard API client. Self-contained (own types + fetch) so the existing
+// lib/api.ts and types/api.ts stay untouched. Mirrors the /api/dashboard/*
+// blueprint in app/dashboard.py (+ dashboard_tiles.py, dashboard_viz.py).
+
+const BASE = ''; // Flask serves /viz and /api on the same origin in prod
+
+export interface DashSearchHit {
+  player_id: string;
+  full_name: string | null;
+  position: string | null;
+  team: string | null;
+  side: 'offense' | 'defense' | null;
+  bucket: string | null; // QB|RB|WR|TE|DE|DT|LB|CB|S
+}
+
+export interface DashPlayerListItem extends DashSearchHit {
+  fantasy_total: number | null;
+}
+
+export interface DashHeader {
+  player_id: string;
+  full_name: string | null;
+  position: string | null;
+  bucket: string | null;
+  side: 'offense' | 'defense' | null;
+  team: string | null;
+  season: number;
+  league_id: string;
+  fantasy_total: number | null;
+  games: number | null;
+  fantasy_ppg: number | null;
+  fantasy_source: string | null;
+}
+
+export interface DashLeague {
+  league_id: string;
+  label: string;
+  enabled: boolean;
+}
+
+async function getJSON<T>(url: string): Promise<T> {
+  const res = await fetch(url);
+  if (!res.ok) {
+    let detail = '';
+    try {
+      const body = await res.json();
+      detail = body.error || JSON.stringify(body);
+    } catch {
+      detail = await res.text();
+    }
+    throw new Error(`${res.status} ${res.statusText}: ${detail}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+export function dashboardSearch(q: string, limit = 20): Promise<DashSearchHit[]> {
+  const u = new URLSearchParams({ q, limit: String(limit) });
+  return getJSON<DashSearchHit[]>(`${BASE}/api/dashboard/search?${u}`);
+}
+
+export function dashboardPlayers(params: {
+  league_id: string;
+  season: number;
+  bucket?: string | null;
+  team?: string | null;
+  limit?: number;
+}): Promise<DashPlayerListItem[]> {
+  const u = new URLSearchParams({
+    league_id: params.league_id,
+    season: String(params.season),
+    limit: String(params.limit ?? 100),
+  });
+  if (params.bucket) u.set('bucket', params.bucket);
+  if (params.team) u.set('team', params.team);
+  return getJSON<DashPlayerListItem[]>(`${BASE}/api/dashboard/players?${u}`);
+}
+
+export function dashboardHeader(
+  playerId: string,
+  season: number,
+  leagueId: string,
+): Promise<DashHeader> {
+  const u = new URLSearchParams({
+    player_id: playerId,
+    season: String(season),
+    league_id: leagueId,
+  });
+  return getJSON<DashHeader>(`${BASE}/api/dashboard/header?${u}`);
+}
+
+export function dashboardLeagues(): Promise<DashLeague[]> {
+  return getJSON<DashLeague[]>(`${BASE}/api/dashboard/leagues`);
+}
+
+// Bucket taxonomy + a few static lists used by the header dropdowns.
+export const BUCKETS = ['QB', 'RB', 'WR', 'TE', 'DE', 'DT', 'LB', 'CB', 'S'] as const;
+export type Bucket = (typeof BUCKETS)[number];
+
+export const NFL_TEAMS = [
+  'ARI', 'ATL', 'BAL', 'BUF', 'CAR', 'CHI', 'CIN', 'CLE', 'DAL', 'DEN',
+  'DET', 'GB', 'HOU', 'IND', 'JAX', 'KC', 'LAC', 'LAR', 'LV', 'MIA',
+  'MIN', 'NE', 'NO', 'NYG', 'NYJ', 'PHI', 'PIT', 'SEA', 'SF', 'TB',
+  'TEN', 'WAS',
+] as const;
+
+export const DASH_SEASONS = [2025, 2024, 2023, 2022, 2021] as const;
+
+// ── Tiles ───────────────────────────────────────────────────────────────────
+export interface DashTile {
+  n: number;
+  label: string;
+  star?: boolean;
+  display?: string;
+  raw?: number | null;
+  sub?: string | null;
+  percentile?: number | null;
+  per_game?: boolean;
+  league_dep?: boolean;
+  warn?: boolean;
+  blank?: boolean;
+}
+
+export interface DashTilesResponse {
+  player_id: string;
+  full_name: string | null;
+  position: string | null;
+  bucket: string | null;
+  side: 'offense' | 'defense' | null;
+  team: string | null;
+  season: number;
+  league_id: string;
+  games: number | null;
+  pool_size: number;
+  tiles: DashTile[];
+}
+
+export function dashboardTiles(
+  playerId: string,
+  season: number,
+  leagueId: string,
+): Promise<DashTilesResponse> {
+  const u = new URLSearchParams({
+    player_id: playerId,
+    season: String(season),
+    league_id: leagueId,
+  });
+  return getJSON<DashTilesResponse>(`${BASE}/api/dashboard/tiles?${u}`);
+}
+
+// ── Snap trend (viz 1) ───────────────────────────────────────────────────────
+export interface DashSnapPoint {
+  week: number;
+  snaps: number;
+  snap_pct: number;        // 0-100, label-ready (backend pre-scales the 0-1 column)
+  team: string | null;     // comma-joined if >1 team logged snaps that week
+  multi_team: boolean;     // same-slug collision marker for the plotted side
+}
+
+export interface DashSnaps {
+  player_id: string;
+  full_name: string | null;
+  position: string | null;
+  bucket: string | null;
+  side: 'offense' | 'defense' | null;
+  season: number;
+  side_label: string | null;
+  points: DashSnapPoint[];
+  season_high: number | null;
+  collision_weeks: number;
+}
+
+export function dashboardSnaps(
+  playerId: string,
+  season: number,
+): Promise<DashSnaps> {
+  const u = new URLSearchParams({
+    player_id: playerId,
+    season: String(season),
+  });
+  return getJSON<DashSnaps>(`${BASE}/api/dashboard/snaps?${u}`);
+}
+
+// ── Route tree (viz 2) ───────────────────────────────────────────────────────
+export interface DashRouteSpoke {
+  key: string;
+  label: string;
+  routes: number;
+  mix_pct: number;          // 0-100, computed share (Σ ≈ 100); NOT stored route_pct
+  targets: number;          // tprr × routes, summed
+  yprr: number | null;
+  tprr: number | null;      // 0-1
+  win_rate: number | null;  // 0-100
+  sep_score: number | null; // raw yards, can be negative
+  ador: number | null;      // raw yards; null for go
+}
+
+export interface DashRoutes {
+  player_id: string;
+  full_name: string | null;
+  position: string | null;
+  bucket: string | null;
+  side: 'offense' | 'defense' | null;
+  season: number;
+  has_data: boolean;
+  total_routes: number;
+  total_targets: number;
+  weeks: number;
+  spokes: DashRouteSpoke[];
+}
+
+export function dashboardRoutes(
+  playerId: string,
+  season: number,
+): Promise<DashRoutes> {
+  const u = new URLSearchParams({
+    player_id: playerId,
+    season: String(season),
+  });
+  return getJSON<DashRoutes>(`${BASE}/api/dashboard/routes?${u}`);
+}
