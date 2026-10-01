@@ -451,3 +451,13 @@ kind = "app"
 name = "app_wishlist_priority"
 owner = "app.ownership"
 kind = "app"
+
+# FTN Fantasy StatsHub (fdb/ftnfantasy.py; website login FTN_USER/FTN_PASS in .env). Not the FTN Data API: that has no DVOA.
+[[table]]
+name = "core_ftn_dvoa_team_week"
+owner = "ftnfantasy.dvoa_team"
+source = "ftnfantasy.com StatsHub POST /dvoa/team, one week per call"
+grain = "week"
+seasons = "2018-"
+weekly = true
+note = "single-week offense/defense/total DVOA per team that played; defDvoa lower is better; mart_team_dvoa_week renames"

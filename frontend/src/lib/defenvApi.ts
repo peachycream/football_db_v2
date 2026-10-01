@@ -127,6 +127,7 @@ export interface LeagueTableRow {
   success_rate_allowed: number | null;
   havoc_rate: number | null;
   pts_per_drive_allowed: number | null;
+  def_dvoa: number | null;
 }
 
 type TrendSeries = {
@@ -134,6 +135,7 @@ type TrendSeries = {
   success_rate_allowed: [number, number | null][];
   havoc_rate: [number, number | null][];
   pts_per_drive_allowed: [number, number | null][];
+  def_dvoa: [number, number | null][];
 };
 
 export interface TeamDefenseEnvResponse {
@@ -145,6 +147,7 @@ export interface TeamDefenseEnvResponse {
     epa_play_allowed: MetricObj;
     havoc_rate: MetricObj;
     plays_faced_per_game: MetricObj;
+    def_dvoa: MetricObj;
     game: GameInfo | null;
   };
   volume_efficiency: VolumeEfficiency;

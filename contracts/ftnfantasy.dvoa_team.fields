@@ -1,0 +1,15 @@
+# Recorded from a live statshub/dvoa/team response 2026-10-01 (2025, week 1: 32 rows). Every field was present in every row.
+# A missing field fails the load.
+team
+id
+games
+wins
+losses
+ties
+offDvoa
+defDvoa
+totalDvoa
+offVoaUnadj
+defVoaUnadj
+offenseBaseline
+defenseBaseline
