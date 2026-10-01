@@ -464,3 +464,45 @@ Where §6 lists `mart_idp_week`, `mart_idp_fp_split` and `mart_dashboard_tiles`:
 - ⏳ Pending the first unattended scheduled run: **Wed 2026-10-07 05:00** (loads week 4). The check: `data\logs\weekly.log` shows exit=0 and 46/46 ok, the new week is loaded in core and marts, and pages on :5000 show it, with no manual step.
 
 **OPEN ITEMS:** (1) Discord webhook (create, then paste). (3) Trayanum/Salter overrides. (4) OL gate reading (Phase 4). (5) §9 FTN 2021 trap revision. (6) Sleeper scoring deferred. (7) Builders rebuild all seasons every run (~10 min). (8) Route-tree panel has no source. (9) `mart_resolution` not built. (10) Sack tiles pending (7b decision).
+
+## Phase 10 — FTN Fantasy team DVOA — DATA LAYER LIVE 2026-10-01; app wiring and `fdb rebuild` ×2 not done (Windows, same session)
+
+### What the source is (found by reading the page's own bundles, 2026-10-01)
+- `ftnfantasy.com/nfl/stats` is a React app over an AWS API. Logged out, every stats call is 401 and the table stays empty. **The FTN Data API (`data.ftndata.com`, `FTN_API_KEY`) has no DVOA** (guessed paths all 403 at the gateway; not brute-forced).
+- Login: `POST api.ftnfantasy.com/users/login {email,password}` -> `access_token`; stats: `POST …execute-api…/Statshub/statshub/dvoa/team` with `Authorization: Bearer` and the page's whole default filter object (`year`, `weeks`, `seasonType` set). Credentials are `FTN_USER` / `FTN_PASS` in `.env` (v1 notes called them "unused"). `/dvoa/defense` is byte-identical to `/dvoa/team` (2025 wk5), so only `team` is read. Per-player DVOA exists (`dvoa/player`), not loaded.
+- A one-week request answers one row per team that PLAYED (bye teams absent), `games = 1`. Seasons 2018+ (2016–17 answer `[]`). Week numbers run 1–22 (playoffs from 19); `seasonType: "post"` did not change the answer, so **REG only** for now.
+
+### Built
+| Piece | Where |
+|---|---|
+| Client | `fdb/ftnfantasy.py`: login, bearer POST, re-login once on 401/403, courtesy gap, retry on 429/5xx; credentials/tokens never in raw params |
+| Loader | `ftnfantasy.dvoa_team` -> `core_ftn_dvoa_team_week` (`schema/023`), one raw file per season-week, source field names verbatim (camelCase kept), contract `contracts/ftnfantasy.dvoa_team.fields`; in the weekly job (`weekly = true`) |
+| Checks | exact team coverage vs the schedule (FTN's `ARZ/BLT/CLV/HST` resolve through `team_aliases`), `games = 1`, no NULL DVOA, \|DVOA\| ≤ 3, league mean offense DVOA within ±0.5 of zero |
+| Mart | view `mart_team_dvoa_week`: the one rename (`off_dvoa`, `def_dvoa`, `total_dvoa`, …) and the franchise code |
+| Tests | 181 total (17 new, `tests/test_ftnfantasy.py`) |
+
+### Loaded (live DB)
+4,318 team-weeks over 143 weeks, 2018–2026 wk3. Idempotent on every week (`fdb check`). `weekly.run_loader` rc 0 (3 in-season weeks re-fetched; in-season weeks are never final because DVOA is re-adjusted, closed seasons are).
+
+### Found
+1. **2022 week 5 is missing at the source**: `[]` for a one-week request (three fetches), and a weeks 1–5 window counts 4 games. Recorded in `SOURCE_DEFECTS`, never offered or fetched. (I first read the 17-week 2022 total as a cancelled game; it was this gap.)
+2. **`defDvoa`: lower is better** (DVOA convention). `totalDvoa = offDvoa − defDvoa` exactly (max error 0.0). League mean is ≈ 0 in every season (−0.002 to −0.009), which is what a correct zero-sum DVOA looks like.
+3. **`offVoaUnadj` is 0 in all 4,318 rows**; `defVoaUnadj` is populated. Stored verbatim; do not read `off_voa_unadj`.
+4. **`wins`/`losses` are not the real result**: on 2025, 37 of 530 non-tie rows disagree with the schedule, all one-score games (e.g. BUF 41–40 BAL gives BAL the "win"). They look DVOA-based. Do not use them as records.
+5. **These are single-week values.** Season-to-date DVOA is FTN's own opponent-adjusted number for a multi-week window, not a sum or average of these (rule 4). For an app window, weight by plays: `SUM(dvoa*plays)/SUM(plays)` with plays from `mart_team_off_env_week` (offense) and plays faced (defense). Not built yet.
+6. **A concurrent `fdb rebuild` clobbered the first backfill.** A rebuild running in another session was building its side DB from raw while I loaded; its swap at 09:36:51 replaced the live file with a build made before this loader existed, leaving the table empty. The pre-swap snapshot still had all 4,318 rows. Recovered by reloading from raw (no network for closed seasons). Lesson for the next session: check for a running `fdb rebuild` (side file `database/fdb.rebuild.db`, new `pre_rebuild_*.db`) before any DB write.
+
+### Gate
+- ✅ Loader idempotent; `fdb weekly` path rc 0; field-name check; plausibility checks; tests.
+- ⏳ **`fdb rebuild` ×2 identical, 0 network calls: NOT RUN for this phase.** Any earlier ×2 hashes were taken without this table, so they no longer describe the DB.
+- ✅ **App wiring done (same day, below).**
+
+**OPEN ITEMS (new):** (17) `fdb rebuild` ×2 for Phase 10. (18) playoff weeks (19–22): unverified, not loaded. (19) `dvoa/player` is available if wanted (QB/RB/WR DVOA).
+
+### App wiring (Team Offense / Team Defense), 2026-10-01
+| Piece | Detail |
+|---|---|
+| API (`app/env.py`) | `_dvoa_rows/_dvoa_window/_dvoa_block`: weekly `mart_team_dvoa_week` joined to that team-week's plays (`mart_team_off_env_week` split `all` for offense; `def_plays` for defense). Any week range = `SUM(dvoa*plays)/SUM(plays)` over the weeks that have both (rule 4); the per-week trend is the raw weekly value; league median per week. Offense: `header.dvoa`, `trend.dvoa`, `trend_league_median.dvoa`, `league_table[].dvoa`. Defense: the same with `def_dvoa` (rank inverted: lower is better) |
+| Front end | Header chip, trend card and a sortable league-table column on both pages ("DVOA" / "DVOA allowed", shown as +x.x%). Types in `lib/offenvApi.ts`, `lib/defenvApi.ts`. Built with `vite build` and copied to `app/static/viz` (`tsc -b` has one existing error, `PlayerDashboard.tsx` imports `esm.sh/html2canvas-pro`; none in the changed files) |
+| Verified | Flask test client: a one-week window equals the raw weekly value (KC wk7 0.2611 / −0.3049); KC 2025 season 0.053 weighted vs 0.036 plain mean. Live :5000 after restarting the app process: BUF 2026 wks 1–3 shows offense DVOA +37.0% (#2/32) and DVOA allowed +3.4% (#21/32); both match a hand calculation from the DB (52/66/62 plays; 73/62/64 plays faced). 186 tests |
+| Notes | The number is **play-weighted weekly DVOA, not FTN's own opponent-adjusted season DVOA** (FTN's multi-week figure cannot be rebuilt from single weeks); the tiles and column say "DVOA" and this log is where the difference is written. 2022 wk5 has none (source gap), so a 2022 season figure covers 17 weeks. |

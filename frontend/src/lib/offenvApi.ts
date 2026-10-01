@@ -59,6 +59,7 @@ export interface LeagueTableRow {
   proe: number | null;
   pace: number | null;
   success_rate: number | null;
+  dvoa: number | null;
 }
 
 export interface PersonnelRow {
@@ -80,6 +81,7 @@ type TrendSeries = {
   success_rate: [number, number | null][];
   pace: [number, number | null][];
   explosive_rate: [number, number | null][];
+  dvoa: [number, number | null][];
 };
 
 export interface GameInfo {
@@ -107,6 +109,7 @@ export interface TeamOffenseEnvResponse {
     proe: MetricObj;
     pace: MetricObj;
     plays_per_game: MetricObj;
+    dvoa: MetricObj;
     game: GameInfo | null;
   };
   splits: Record<CoreSplit, SplitMetrics>;

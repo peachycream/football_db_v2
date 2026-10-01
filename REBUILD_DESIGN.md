@@ -131,6 +131,7 @@ Checked in as `registry/sources.yaml` and enforced by the loader framework: a lo
 | `core_pff_blocking_week` | PFF `offense/blocking` | player-week | 2016– | Team Offense O-line grade |
 | `core_pff_coverage_scheme_week` | PFF `defense/coverage_scheme` | player-week | 2016– | Team Defense man/zone |
 | `core_pff_grades_season` | PFF `offense/summary` + `defense/summary` with **`week=1,…,18,28,29,30,32`** | player-season | 2016– | Team Defense grades |
+| `core_ftn_dvoa_team_week` | FTN Fantasy StatsHub `dvoa/team` (website login; **not** the FTN Data API), one week per call (Phase 10) | team-week | 2018– (REG) | `mart_team_dvoa_week` → Team Offense / Defense (not yet wired) |
 | `core_fantasy_leagues`, `_franchises`, `_scoring_rules` | MFL API / Sleeper API | league-season | 2026 (+2025) | Matchups scoring, Ownership |
 | `core_fantasy_rosters` | MFL `rosters` / Sleeper `rosters`, **snapshot rows with `snapshot_at`** | roster slot | current | Ownership |
 | `core_fantasy_scores` | MFL `playerScores` (reported) | player-week-league | 2025– | IDP calibration truth |

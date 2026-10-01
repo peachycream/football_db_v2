@@ -39,6 +39,10 @@ function fmtPct(v: number | null, digits = 1): string {
   if (v == null) return '—';
   return `${(v * 100).toFixed(digits)}%`;
 }
+function fmtDvoa(v: number | null): string {
+  if (v == null) return '—';
+  return `${v >= 0 ? '+' : ''}${(v * 100).toFixed(1)}%`;
+}
 function fmtNum(v: number | null, digits = 2): string {
   if (v == null) return '—';
   return v.toFixed(digits);
@@ -352,6 +356,7 @@ export default function TeamOffenseDashboard() {
                   <MetricChip label={neutralOnly ? 'EPA/play (neutral)' : 'EPA/play'} obj={data.splits[activeAll].epa_per_play} size="lg" />
                   <MetricChip label={neutralOnly ? 'PROE (neutral)' : 'PROE'} obj={data.splits[activeAll].proe} fmt={(v) => fmtPct(v)} size="lg" />
                   <MetricChip label="Pace sec/snap" obj={data.header.pace} fmt={(v) => fmtNum(v, 1)} size="lg" />
+                  <MetricChip label="DVOA" obj={data.header.dvoa} fmt={fmtDvoa} size="lg" />
                   <MetricChip label="Plays/game" obj={data.header.plays_per_game} fmt={(v) => fmtNum(v, 1)} size="lg" />
                 </div>
               </div>
@@ -435,7 +440,8 @@ export default function TeamOffenseDashboard() {
                   <div className="text-xs uppercase tracking-wider text-text-dim mb-3">
                     Trend (dashed = league median)
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <TrendCard label="DVOA (FTN)" series={data.trend.dvoa} median={data.trend_league_median.dvoa} />
                     <TrendCard label="EPA/play" series={data.trend.epa_play} median={data.trend_league_median.epa_play} />
                     <TrendCard label="PROE" series={data.trend.proe} median={data.trend_league_median.proe} />
                     <TrendCard label="Success rate" series={data.trend.success_rate} median={data.trend_league_median.success_rate} />
@@ -636,13 +642,14 @@ function TargetRateByPosition({ rates }: { rates: TargetRateByPositionData }) {
 }
 
 function LeagueTable({ rows, selectedTeam }: { rows: TeamOffenseEnvResponse['league_table']; selectedTeam: string }) {
-  const [sortKey, setSortKey] = useState<'epa_play' | 'proe' | 'pace' | 'success_rate'>('epa_play');
+  const [sortKey, setSortKey] = useState<'epa_play' | 'proe' | 'pace' | 'success_rate' | 'dvoa'>('epa_play');
   const sorted = useMemo(
     () => [...rows].sort((a, b) => (b[sortKey] ?? -Infinity) - (a[sortKey] ?? -Infinity)),
     [rows, sortKey],
   );
   const cols: { key: typeof sortKey; label: string; fmt: (v: number | null) => string }[] = [
     { key: 'epa_play', label: 'EPA/play', fmt: (v) => fmtNum(v, 3) },
+    { key: 'dvoa', label: 'DVOA', fmt: fmtDvoa },
     { key: 'proe', label: 'PROE', fmt: fmtPct },
     { key: 'pace', label: 'Sec/snap', fmt: (v) => fmtNum(v, 1) },
     { key: 'success_rate', label: 'Success %', fmt: fmtPct },

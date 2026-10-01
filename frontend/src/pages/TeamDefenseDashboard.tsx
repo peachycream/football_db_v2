@@ -37,6 +37,10 @@ function fmtPct(v: number | null, digits = 1): string {
   if (v == null) return '—';
   return `${(v * 100).toFixed(digits)}%`;
 }
+function fmtDvoa(v: number | null): string {
+  if (v == null) return '—';
+  return `${v >= 0 ? '+' : ''}${(v * 100).toFixed(1)}%`;
+}
 function fmtNum(v: number | null, digits = 2): string {
   if (v == null) return '—';
   return v.toFixed(digits);
@@ -325,6 +329,7 @@ export default function TeamDefenseDashboard() {
                 <div className="flex gap-2">
                   <MetricChip label="EPA/play allowed" obj={data.header.epa_play_allowed} size="lg" />
                   <MetricChip label="Havoc rate" obj={data.header.havoc_rate} fmt={(v) => fmtPct(v)} size="lg" />
+                  <MetricChip label="DVOA allowed" obj={data.header.def_dvoa} fmt={fmtDvoa} size="lg" />
                   <MetricChip label="Plays faced/game" obj={data.header.plays_faced_per_game} fmt={(v) => fmtNum(v, 1)} size="lg" />
                 </div>
               </div>
@@ -412,7 +417,8 @@ export default function TeamDefenseDashboard() {
                   <div className="text-xs uppercase tracking-wider text-text-dim mb-3">
                     Trend (dashed = league median)
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <TrendCard label="DVOA allowed (FTN)" series={data.trend.def_dvoa} median={data.trend_league_median.def_dvoa} />
                     <TrendCard label="EPA/play allowed" series={data.trend.epa_per_play_allowed} median={data.trend_league_median.epa_per_play_allowed} />
                     <TrendCard label="Success rate allowed" series={data.trend.success_rate_allowed} median={data.trend_league_median.success_rate_allowed} />
                     <TrendCard label="Havoc rate" series={data.trend.havoc_rate} median={data.trend_league_median.havoc_rate} />
@@ -549,13 +555,14 @@ function MiniStat({ label, value }: { label: string; value: string }) {
 }
 
 function LeagueTable({ rows, selectedTeam }: { rows: TeamDefenseEnvResponse['league_table']; selectedTeam: string }) {
-  const [sortKey, setSortKey] = useState<'epa_play_allowed' | 'success_rate_allowed' | 'havoc_rate' | 'pts_per_drive_allowed'>('epa_play_allowed');
+  const [sortKey, setSortKey] = useState<'epa_play_allowed' | 'success_rate_allowed' | 'havoc_rate' | 'pts_per_drive_allowed' | 'def_dvoa'>('epa_play_allowed');
   const sorted = useMemo(
     () => [...rows].sort((a, b) => (a[sortKey] ?? Infinity) - (b[sortKey] ?? Infinity)),
     [rows, sortKey],
   );
   const cols: { key: typeof sortKey; label: string; fmt: (v: number | null) => string }[] = [
     { key: 'epa_play_allowed', label: 'EPA/play allowed', fmt: (v) => fmtNum(v, 3) },
+    { key: 'def_dvoa', label: 'DVOA allowed', fmt: fmtDvoa },
     { key: 'success_rate_allowed', label: 'Success % allowed', fmt: fmtPct },
     { key: 'havoc_rate', label: 'Havoc %', fmt: fmtPct },
     { key: 'pts_per_drive_allowed', label: 'Pts/drive allowed', fmt: (v) => fmtNum(v, 2) },

@@ -64,6 +64,9 @@ class Loader:
     fetches: bool = True          # False: reads the raw file another loader fetched (same source/endpoint)
     raw_retention: str = "keep3"  # non-final raw kept per partition: 'keep3' | 'daily' (newest per UTC day)
     season_types: tuple[str, ...] = ("REG", "POST")  # week grains: which schedule weeks are offered
+    max_week: int | None = None   # week grains: highest schedule week offered (a source that stops at week 17)
+    closed_seasons_only: bool = False  # season grain: offer only seasons whose Super Bowl is final
+    unavailable: dict = {}        # week grains: {(season, season_type, week): reason} the SOURCE is known to serve wrongly; never offered
     publish_grace_days: int = 0   # >0: a lagged feed; NotPublished within this many days of the week going final is PENDING
 
     # Grains: 'snapshot' | 'reference' | 'season' | 'week' (nflverse), and the league
@@ -174,7 +177,11 @@ def scopes(conn: sqlite3.Connection, loader: Loader, seasons: list[int] | None =
         lo, hi = loader.season_range
         found = [s for s in found if lo <= s <= hi]
     if loader.grain == "week":
-        return [Scope(s, t, w) for s in found for (t, w) in schedule.completed_weeks(conn, s)]
+        return [Scope(s, t, w) for s in found for (t, w) in schedule.completed_weeks(conn, s)
+                if t in loader.season_types and (loader.max_week is None or w <= loader.max_week)
+                and (s, t, w) not in loader.unavailable]
+    if loader.closed_seasons_only:
+        found = [s for s in found if schedule.season_is_closed(conn, s)]
     return [Scope(s) for s in found]
 
 

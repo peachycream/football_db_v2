@@ -106,6 +106,45 @@ def _game_info(con, season, team, week):
             "team_score": ts, "opp_score": os_, "result": result}
 
 
+def _dvoa_rows(con, season, lo, hi, side):
+    """FTN's weekly team DVOA (mart_team_dvoa_week) with the plays it covers: -> {team: {week: (dvoa, plays)}}.
+    Offense is weighted by the team's offensive plays, defense by plays faced. A week FTN does not serve (2022 wk5)
+    or a team on bye has no row and simply carries no weight."""
+    if side == "off":
+        col, join = "d.off_dvoa", "JOIN mart_team_off_env_week p ON p.split = 'all' AND p.plays > 0"
+        plays = "p.plays"
+    else:
+        col, join, plays = "d.def_dvoa", "JOIN mart_team_def_env_week p ON p.def_plays > 0", "p.def_plays"
+    out = {}
+    for r in con.execute(f"""SELECT d.team, d.week, {col} AS v, {plays} AS w FROM mart_team_dvoa_week d {join}
+                             AND p.season = d.season AND p.season_type = d.season_type AND p.team = d.team AND p.week = d.week
+                             WHERE d.season = ? AND d.season_type = 'REG' AND d.week BETWEEN ? AND ? AND {col} IS NOT NULL""",
+                         (season, lo, hi)):
+        out.setdefault(r["team"], {})[r["week"]] = (r["v"], r["w"])
+    return out
+
+
+def _dvoa_window(by_team):
+    """Play-weighted DVOA over the weeks present (rule 4: SUM(rate*w)/SUM(w), never a mean of rates). -> {team: (value, plays)}"""
+    out = {}
+    for t, weeks in by_team.items():
+        w = sum(p for _, p in weeks.values())
+        out[t] = (sum(v * p for v, p in weeks.values()) / w, w) if w else (None, 0)
+    return out
+
+
+def _dvoa_block(con, season, lo, hi, team, side):
+    """-> (header tile, per-week trend, per-week league median, {team: window value}) for one side."""
+    rows = _dvoa_rows(con, season, lo, hi, side)
+    win = _dvoa_window(rows)
+    v, n = win.get(team, (None, 0))
+    tile = _metric_obj(v, n, [x for x, _ in win.values()], invert=(side == "def"))
+    trend = [[w, _r(rows[team][w][0], 4)] for w in sorted(rows.get(team, {}))]
+    weeks = sorted({w for d in rows.values() for w in d})
+    median = [[w, _r(_median(d[w][0] for d in rows.values() if w in d), 4)] for w in weeks]
+    return tile, trend, median, {t: x for t, (x, _) in win.items()}
+
+
 def _max_week(con, table, season):
     r = con.execute(f"SELECT MAX(week) FROM {table} WHERE season = ? AND season_type = 'REG'", (season,)).fetchone()
     return r[0] if r and r[0] else 18
@@ -216,7 +255,10 @@ def team_offense_env():
                          "pace": _r(s.get("neutral", {}).get("sec_per_snap"), 2),
                          "success_rate": _r(s.get("all", {}).get("success_rate"), 8)} for t, s in all_sums.items()]
         league_table.sort(key=lambda d: (d["epa_play"] is None, -(d["epa_play"] or 0)))
-        total = sum((tm.get(s, {}).get("n") or 0) for s in PERSONNEL_SPLITS)
+        header["dvoa"], trend["dvoa"], median["dvoa"], dvoa_by_team = _dvoa_block(con, season, lo, hi, team, "off")
+        for row in league_table:
+            row["dvoa"] = _r(dvoa_by_team.get(row["team"]), 4)
+        total =sum((tm.get(s, {}).get("n") or 0) for s in PERSONNEL_SPLITS)
         personnel = []
         if total:
             for sp in PERSONNEL_SPLITS:
@@ -406,6 +448,9 @@ def team_defense_env():
                          "success_rate_allowed": _r(tm.get("success_rate_allowed"), 8), "havoc_rate": _r(tm.get("havoc_rate"), 8),
                          "pts_per_drive_allowed": _r(tm.get("pts_per_drive_allowed"), 4)} for t, tm in all_sums.items()]
         league_table.sort(key=lambda d: (d["epa_play_allowed"] is None, d["epa_play_allowed"] or 0))
+        header["def_dvoa"], trend["def_dvoa"], median["def_dvoa"], dvoa_by_team = _dvoa_block(con, season, lo, hi, team, "def")
+        for row in league_table:
+            row["def_dvoa"] = _r(dvoa_by_team.get(row["team"]), 4)
         return jsonify({
             "team": team, "season": season, "weeks": [lo, hi], "header": header,
             "volume_efficiency": {"n": m.get("n", 0), **{k: o(k) for k in (
