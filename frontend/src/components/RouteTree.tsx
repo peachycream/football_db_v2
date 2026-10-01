@@ -12,14 +12,19 @@ import { dashboardRoutes, type DashRoutes, type DashRouteSpoke } from '@/lib/das
 
 const RECEIVERS = new Set(['WR', 'TE', 'RB']);
 const SMALL_SAMPLE = 8;          // routes below this render faded/dashed
-const YPRR_CLAMP = 4;            // color scale ceiling
+const YPRR_CLAMP = 4;            // color scale ceiling (routes basis)
+const YPT_CLAMP = 14;            // color scale ceiling (targets basis: yards per target)
 
-function colorFor(yprr: number | null): string {
-  if (yprr == null) return 'var(--tx-dim)';
-  const c = Math.max(0, Math.min(YPRR_CLAMP, yprr));
-  const hue = (c / YPRR_CLAMP) * 120; // red -> green
+function colorFor(v: number | null, clamp = YPRR_CLAMP): string {
+  if (v == null) return 'var(--tx-dim)';
+  const c = Math.max(0, Math.min(clamp, v));
+  const hue = (c / clamp) * 120; // red -> green
   return `hsl(${hue} 65% 54%)`;
 }
+
+// v2 (2026-10-01): two bases. 'routes' = routes run per route type (FTN, 2026-). 'targets' =
+// 2016-2025 history, target share by the TARGETED receiver's route (nflverse): there is no
+// routes-run denominator, so the wheel is labelled as targets and colored by yards per target.
 
 export default function RouteTree({
   playerId,
@@ -65,6 +70,9 @@ export default function RouteTree({
   }, [isReceiver]);
 
   const spokes = data?.spokes ?? [];
+  const isTargets = data?.basis === 'targets';
+  const metric = (s: DashRouteSpoke) => (isTargets ? s.ypt ?? null : s.yprr);
+  const clamp = isTargets ? YPT_CLAMP : YPRR_CLAMP;
 
   const layout = useMemo(() => {
     if (!dims.w || !dims.h || spokes.length === 0) return null;
@@ -101,14 +109,14 @@ export default function RouteTree({
       const tipY = cy + sin * len;
       const labX = cx + cos * (maxR + 12);
       const labY = cy + sin * (maxR + 12);
-      const small = s.routes < SMALL_SAMPLE;
+      const small = (isTargets ? s.targets : s.routes) < SMALL_SAMPLE;
       const dotR = 3 + Math.min(s.targets, 30) / 30 * 4;
       return { s, i, cos, sin, tipX, tipY, labX, labY, len, small, dotR };
     });
 
     const rings = [0.25, 0.5, 0.75, 1].map((f) => stub + f * (maxR - stub));
     return { size, cx, cy, maxR, stub, hubR, nodes, rings };
-  }, [dims, spokes]);
+  }, [dims, spokes, isTargets]);
 
   if (!isReceiver) return null;
 
@@ -118,9 +126,11 @@ export default function RouteTree({
     <div className="rounded-xl border border-border bg-bg-card p-4 w-full flex-1 flex flex-col min-h-0">
       <div className="flex items-center justify-between mb-1 shrink-0">
         <div className="text-[10px] uppercase tracking-wider text-text-muted">
-          Route tree · {season}
+          {isTargets ? 'Targets by route' : 'Route tree'} · {season}
           {data?.has_data
-            ? ` · ${data.total_routes} routes · ${data.total_targets} tgt · ${data.weeks} wk`
+            ? isTargets
+              ? ` · ${data.total_targets} tgt · ${data.weeks} wk`
+              : ` · ${data.total_routes} routes · ${data.total_targets} tgt · ${data.weeks} wk`
             : ''}
         </div>
       </div>
@@ -129,7 +139,9 @@ export default function RouteTree({
           Profile's Role-bar-at-top layout, not buried below the diagram. */}
       {data?.has_data && (
         <div className="mb-2 text-xs text-text-muted text-center shrink-0">
-          length = route share · color = YPRR · faded = &lt;{SMALL_SAMPLE} routes
+          {isTargets
+            ? <>length = target share · color = yards/target · faded = &lt;{SMALL_SAMPLE} targets</>
+            : <>length = route share · color = YPRR · faded = &lt;{SMALL_SAMPLE} routes</>}
         </div>
       )}
 
@@ -158,14 +170,14 @@ export default function RouteTree({
               <g key={n.s.key} opacity={n.small ? 0.45 : 1}>
                 <line
                   x1={layout.cx} y1={layout.cy} x2={n.tipX} y2={n.tipY}
-                  stroke={colorFor(n.s.yprr)}
+                  stroke={colorFor(metric(n.s), clamp)}
                   strokeWidth={hover === n.i ? 4.5 : 2.75}
                   strokeDasharray={n.small ? '4 3' : undefined}
                   strokeLinecap="round"
                 />
                 <circle
                   cx={n.tipX} cy={n.tipY} r={n.dotR}
-                  fill={colorFor(n.s.yprr)} stroke="var(--bg)" strokeWidth={1}
+                  fill={colorFor(metric(n.s), clamp)} stroke="var(--bg)" strokeWidth={1}
                 />
                 {/* invisible fat hit-line for hover */}
                 <line
@@ -197,14 +209,14 @@ export default function RouteTree({
               x={layout.cx} y={layout.cy - 1} textAnchor="middle"
               fontSize={19} fontWeight={700} fill="var(--tx)"
             >
-              {data.total_routes}
+              {isTargets ? data.total_targets : data.total_routes}
             </text>
             <text
               x={layout.cx} y={layout.cy + 13} textAnchor="middle"
               fontSize={10.5} fill="var(--tx-mut)"
               style={{ textTransform: 'uppercase', letterSpacing: '0.08em' }}
             >
-              routes
+              {isTargets ? 'targets' : 'routes'}
             </text>
           </svg>
         )}
@@ -219,17 +231,30 @@ export default function RouteTree({
             }}
           >
             <div className="text-text font-semibold">{hv.s.label}</div>
-            <div className="text-text-muted tabular-nums">
-              {hv.s.routes} routes · {Math.round(hv.s.mix_pct)}% mix
-            </div>
-            <div className="text-text-dim tabular-nums">
-              {Math.round(hv.s.targets)} tgt
-              {hv.s.win_rate != null ? ` · ${Math.round(hv.s.win_rate)}% win` : ''}
-            </div>
-            <div className="text-text-dim tabular-nums">
-              {hv.s.yprr != null ? `${hv.s.yprr} YPRR` : 'YPRR —'}
-              {hv.s.ador != null ? ` · ${hv.s.ador} ADOR` : ''}
-            </div>
+            {isTargets ? (
+              <>
+                <div className="text-text-muted tabular-nums">
+                  {Math.round(hv.s.targets)} tgt · {Math.round(hv.s.mix_pct)}% of targets
+                </div>
+                <div className="text-text-dim tabular-nums">
+                  {hv.s.receptions ?? 0} rec · {hv.s.ypt != null ? `${hv.s.ypt} yds/tgt` : 'yds/tgt —'}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-text-muted tabular-nums">
+                  {hv.s.routes} routes · {Math.round(hv.s.mix_pct)}% mix
+                </div>
+                <div className="text-text-dim tabular-nums">
+                  {Math.round(hv.s.targets)} tgt
+                  {hv.s.win_rate != null ? ` · ${Math.round(hv.s.win_rate)}% win` : ''}
+                </div>
+                <div className="text-text-dim tabular-nums">
+                  {hv.s.yprr != null ? `${hv.s.yprr} YPRR` : 'YPRR —'}
+                  {hv.s.ador != null ? ` · ${hv.s.ador} ADOR` : ''}
+                </div>
+              </>
+            )}
             {hv.small && <div className="text-warn">small sample (&lt;{SMALL_SAMPLE})</div>}
           </div>
         )}

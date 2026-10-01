@@ -214,6 +214,8 @@ export interface DashRouteSpoke {
   win_rate: number | null;  // 0-100
   sep_score: number | null; // raw yards, can be negative
   ador: number | null;      // raw yards; null for go
+  receptions?: number;      // basis 'targets' only
+  ypt?: number | null;      // basis 'targets' only: yards per target
 }
 
 export interface DashRoutes {
@@ -224,6 +226,9 @@ export interface DashRoutes {
   side: 'offense' | 'defense' | null;
   season: number;
   has_data: boolean;
+  // 'routes' = routes run per route type (FTN, 2026-); 'targets' = target share by the
+  // targeted receiver's route (nflverse, 2016-2025: no routes-run denominator exists)
+  basis?: 'routes' | 'targets';
   total_routes: number;
   total_targets: number;
   weeks: number;

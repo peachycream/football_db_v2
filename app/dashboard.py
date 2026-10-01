@@ -645,13 +645,51 @@ ROUTE_SPOKES = [("0 - Screen", "screen", "Screen"), ("10 - Swing", "swing", "Swi
                 ("7 - Post", "post", "Post"), ("12 - Wheel", "wheel", "Wheel"), ("9 - Go", "go", "Go")]
 
 
+# Targets-by-route history (2016-2025, nflverse): each season keeps its OWN vocabulary (it changed
+# in 2023 and does not map across), shown in this short -> deep wheel order with short labels.
+TARGET_ROUTE_ORDER = [("SCREEN", "Screen"), ("FLAT", "Flat"), ("SWING", "Swing"), ("SHALLOW CROSS/DRAG", "Drag"),
+                      ("SLANT", "Slant"), ("QUICK OUT", "Quick Out"), ("OUT", "Out"), ("HITCH", "Hitch"),
+                      ("HITCH/CURL", "Hitch"), ("ANGLE", "Angle"), ("TEXAS/ANGLE", "Angle"), ("IN", "In"),
+                      ("IN/DIG", "In/Dig"), ("CROSS", "Cross"), ("DEEP OUT", "Deep Out"), ("CORNER", "Corner"),
+                      ("POST", "Post"), ("WHEEL", "Wheel"), ("GO", "Go")]
+
+
+def _target_tree(conn, gsis, season, out):
+    """basis='targets': spokes are target share by the route he was targeted on (no routes-run
+    denominator exists before FTN, so TPRR/YPRR are null and the page labels it as targets)."""
+    vocab = {r[0] for r in conn.execute("SELECT DISTINCT route FROM mart_player_targets_by_route_week "
+                                        "WHERE season = ? AND season_type = 'REG'", (season,))}
+    rows = {r["route"]: r for r in conn.execute("""SELECT route, SUM(targets) targets, SUM(receptions) receptions,
+            SUM(rec_yards) rec_yards FROM mart_player_targets_by_route_week
+            WHERE gsis_id = ? AND season = ? AND season_type = 'REG' GROUP BY route""", (gsis, season))}
+    total = sum(r["targets"] for r in rows.values())
+    if total <= 0:
+        return out
+    spokes = []
+    for route, lab in TARGET_ROUTE_ORDER + [(v, v.title()) for v in sorted(vocab - {r for r, _ in TARGET_ROUTE_ORDER})]:
+        if route not in vocab:
+            continue
+        r = rows.get(route)
+        n = r["targets"] if r else 0
+        spokes.append({"key": route.lower().replace("/", "_").replace(" ", "_"), "label": lab, "routes": 0,
+                       "mix_pct": round(100 * n / total, 1), "targets": float(n),
+                       "receptions": r["receptions"] if r else 0,
+                       "ypt": round(r["rec_yards"] / n, 2) if n else None,
+                       "yprr": None, "tprr": None, "win_rate": None, "sep_score": None, "ador": None})
+    weeks = conn.execute("""SELECT COUNT(DISTINCT week) FROM mart_player_targets_by_route_week WHERE gsis_id = ?
+                            AND season = ? AND season_type = 'REG'""", (gsis, season)).fetchone()[0]
+    out.update(has_data=True, basis="targets", total_routes=0, total_targets=total, weeks=weeks, spokes=spokes)
+    return out
+
+
 @bp.route("/api/dashboard/routes")
 def routes():
     """Route tree, v1's JSON shape. v1 read FPD's per-route weekly file (retired); v2 reads FTN's
     per-play routes (mart_player_routes_week, 2026-), REG only like the rest of the page.
     routes / targets / TPRR / YPRR per route type are real; FPD's proprietary win rate,
     separation score and ADOR have no FTN equivalent and are null (the page omits them).
-    Seasons FTN did not chart routes for answer has_data false, so the panel hides."""
+    Seasons FTN did not chart routes for (2016-2025) get the TARGET tree instead: basis='targets',
+    target share by the targeted receiver's route (nflverse), which the page labels as targets."""
     gsis = (request.args.get("player_id") or "").strip()
     if not gsis:
         return jsonify({"error": "player_id required"}), 400
@@ -671,7 +709,7 @@ def routes():
                 WHERE gsis_id = ? AND season = ? AND season_type = 'REG' GROUP BY route""", (gsis, season))}
         total = sum(r["routes"] for r in rows.values())
         if total <= 0:
-            return jsonify(out)
+            return jsonify(_target_tree(conn, gsis, season, out))   # no FTN routes: the 2016-2025 target tree
         spokes = []
         for ftn, key, lab in ROUTE_SPOKES:
             r = rows.get(ftn)
@@ -683,7 +721,7 @@ def routes():
                            "win_rate": None, "sep_score": None, "ador": None})
         weeks = conn.execute("""SELECT COUNT(DISTINCT week) FROM mart_player_routes_week WHERE gsis_id = ? AND season = ?
                                 AND season_type = 'REG'""", (gsis, season)).fetchone()[0]
-        out.update(has_data=True, total_routes=total, total_targets=sum(r["targets"] for r in rows.values()),
+        out.update(has_data=True, basis="routes", total_routes=total, total_targets=sum(r["targets"] for r in rows.values()),
                    weeks=weeks, spokes=spokes)
         return jsonify(out)
     finally:

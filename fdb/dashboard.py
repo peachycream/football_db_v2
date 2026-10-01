@@ -6,6 +6,8 @@
     mart_rb_run_lanes_week    RB lane sums            (v1 ingest_rb_run_lanes_v1)
     mart_player_routes_week   route tree: routes / targets / catches / yards per route type
                               (FTN participation, 2026-; v1's FPD route file has no successor)
+    mart_player_targets_by_route_week   2016-2025 history: TARGETS by the targeted receiver's
+                              route (nflverse participation); no routes-run denominator exists
 
 All four are rebuilt wholly from core in one transaction (delete, insert, check, commit or
 roll back). Every season_type is built; the app reads REG, as v1 did. Differences from v1:
@@ -101,8 +103,18 @@ FROM ({_SLOTS}) r
 JOIN core_ftn_plays p ON p.pid = r.pid AND p.type IN ('PASS', 'RUSH')   -- RUSH: scrambles etc.; no-plays excluded
 GROUP BY 1, 2, 3, 4, 5"""
 
+TARGETS_BY_ROUTE = """
+INSERT INTO mart_player_targets_by_route_week
+SELECT b.season, b.season_type, b.week, b.receiver_player_id, x.route,
+       COUNT(*), SUM(CASE WHEN b.complete_pass = 1 THEN 1 ELSE 0 END),
+       COALESCE(SUM(CASE WHEN b.complete_pass = 1 THEN b.yards_gained END), 0)
+FROM core_participation x
+JOIN core_pbp b ON b.game_id = x.nflverse_game_id AND b.play_id = x.play_id
+WHERE x.route IS NOT NULL AND b.pass_attempt = 1 AND b.two_point_attempt = 0 AND b.receiver_player_id IS NOT NULL
+GROUP BY 1, 2, 3, 4, 5"""
+
 TABLES = ("mart_player_week", "mart_qb_dropback_week", "mart_qb_pass_zones_week", "mart_rb_run_lanes_week",
-          "mart_player_routes_week")
+          "mart_player_routes_week", "mart_player_targets_by_route_week")
 
 
 def checks(conn) -> list[str]:
@@ -148,6 +160,13 @@ def checks(conn) -> list[str]:
                 ON n.season = r.season AND n.season_type = r.season_type AND n.week = r.week"""):
         if not 0.95 * b <= a <= 1.02 * b:
             fails.append(f"{s} {st}{w}: route-tree targets {a} vs nflverse {b}")
+    # targets-by-route history: route-tagged targets are 97-100.5% of nflverse's targets every season
+    for s, a, b in conn.execute("""
+            SELECT r.season, r.t, n.t FROM
+              (SELECT season, SUM(targets) t FROM mart_player_targets_by_route_week GROUP BY 1) r
+              JOIN (SELECT season, SUM(targets) t FROM core_player_stats GROUP BY 1) n ON n.season = r.season"""):
+        if not 0.97 * b <= a <= 1.005 * b:
+            fails.append(f"{s}: targets-by-route {a} vs nflverse targets {b}")
     bad = conn.execute("SELECT COUNT(*) FROM mart_qb_dropback_week WHERE completions > attempts OR attempts > dropbacks "
                        "OR cpoe_attempts > attempts").fetchone()[0]
     if bad:
@@ -160,7 +179,7 @@ def build(conn) -> dict:
     try:
         for t in TABLES:
             conn.execute(f"DELETE FROM {t}")
-        for sql in (PLAYER_WEEK, QB_DROPBACK, QB_ZONES, RB_LANES, PLAYER_ROUTES):
+        for sql in (PLAYER_WEEK, QB_DROPBACK, QB_ZONES, RB_LANES, PLAYER_ROUTES, TARGETS_BY_ROUTE):
             conn.execute(sql)
         counts = {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in TABLES}
         fails = checks(conn)

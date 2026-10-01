@@ -87,6 +87,31 @@ class Routes(unittest.TestCase):
             self.assertEqual(got[("00-TE", "3 - Hitch/Curl")], (3, 1, 0, 0))
             c.close()
 
+    def test_targets_by_route_history_and_api(self):
+        """2016-2025: TARGET share by the targeted receiver's route (nflverse); the season's own vocabulary."""
+        with TempEnv() as t:
+            c = t.conn()
+            c.execute("PRAGMA foreign_keys = OFF")
+            c.execute("INSERT INTO players (gsis_id, display_name, position, players_source) VALUES ('00-WR', 'Test WR', 'WR', 'nflverse_players')")
+            c.execute("INSERT INTO mart_player_week (season, season_type, week, gsis_id, position) VALUES (2019, 'REG', 1, '00-WR', 'WR')")
+            plays = [(1, "OUT", 1, 9), (2, "OUT", 0, 0), (3, "GO", 1, 40), (4, None, 1, 5)]   # play 4: no route tagged
+            for pid, route, comp, yds in plays:
+                c.execute("""INSERT INTO core_pbp (game_id, play_id, season, season_type, week, pass_attempt, two_point_attempt,
+                             receiver_player_id, complete_pass, yards_gained, load_id) VALUES ('g', ?, 2019, 'REG', 1, 1, 0, '00-WR', ?, ?, 1)""",
+                          (pid, comp, yds))
+                c.execute("INSERT INTO core_participation (nflverse_game_id, play_id, season, season_type, week, route, load_id) VALUES ('g', ?, 2019, 'REG', 1, ?, 1)",
+                          (pid, route))
+            c.execute(builder.TARGETS_BY_ROUTE)
+            got = {r: (n, rc, y) for r, n, rc, y in c.execute("SELECT route, targets, receptions, rec_yards FROM mart_player_targets_by_route_week")}
+            self.assertEqual(got, {"OUT": (2, 1, 9.0), "GO": (1, 1, 40.0)})
+            c.close()
+            from app import create_app
+            j = create_app().test_client().get("/api/dashboard/routes?player_id=00-WR&season=2019").get_json()
+            self.assertEqual((j["has_data"], j["basis"], j["total_targets"], j["total_routes"]), (True, "targets", 3, 0))
+            self.assertEqual([x["label"] for x in j["spokes"]], ["Out", "Go"])     # short -> deep, this season's vocabulary only
+            out = j["spokes"][0]
+            self.assertEqual((out["mix_pct"], out["receptions"], out["ypt"], out["yprr"]), (66.7, 1, 4.5, None))
+
     def test_spokes_cover_ftns_vocabulary_once(self):
         ftn = [f"{i} - {n}" for i, n in enumerate(["Screen", "Slant", "Quick Out", "Hitch/Curl", "Deep Out", "In/Dig", "Corner",
                                                     "Post", "Shallow Cross/Drag", "Go", "Swing", "Texas/Angle", "Wheel"])]
