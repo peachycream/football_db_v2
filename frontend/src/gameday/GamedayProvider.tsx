@@ -19,9 +19,12 @@ interface GamedayContextValue {
   data: GamedayResponse | null;
   loading: boolean;
   error: string | null;
+  /** false once the server answers 404: v2 has no /gameday/live route yet (the v1 tracker is not ported),
+   *  so the widget renders nothing and stops polling instead of showing a 404 in the drawer. */
+  available: boolean;
 }
 
-const GamedayContext = createContext<GamedayContextValue>({ data: null, loading: true, error: null });
+const GamedayContext = createContext<GamedayContextValue>({ data: null, loading: true, error: null, available: true });
 
 export function useGameday() {
   return useContext(GamedayContext);
@@ -42,12 +45,19 @@ export function GamedayProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<GamedayResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [available, setAvailable] = useState(true);
 
-  const fetchOnce = useCallback(async (): Promise<GamedayResponse | null> => {
+  const fetchOnce = useCallback(async (): Promise<GamedayResponse | null | 'unavailable'> => {
     try {
       const replay = replayParam();
       const url = replay ? `/gameday/live?replay=${encodeURIComponent(replay)}` : '/gameday/live';
       const res = await fetch(url);
+      if (res.status === 404) {   // no such route: not an outage, nothing to poll for
+        setAvailable(false);
+        setData(null);
+        setError(null);
+        return 'unavailable';
+      }
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
       const json: GamedayResponse = await res.json();
       setData(json);
@@ -64,15 +74,18 @@ export function GamedayProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     let timer: number | null = null;
+    let unavailable = false;
 
     async function tick() {
       const json = await fetchOnce();
-      if (cancelled || document.visibilityState === 'hidden') return;
-      const delay = json?.any_live ? POLL_LIVE_MS : POLL_IDLE_MS;
+      if (json === 'unavailable') unavailable = true;
+      if (cancelled || unavailable || document.visibilityState === 'hidden') return;
+      const delay = json && json !== 'unavailable' && json.any_live ? POLL_LIVE_MS : POLL_IDLE_MS;
       timer = window.setTimeout(tick, delay);
     }
 
     function onVisibility() {
+      if (unavailable) return;
       if (document.visibilityState === 'visible') {
         if (timer != null) window.clearTimeout(timer);
         tick();
@@ -92,7 +105,7 @@ export function GamedayProvider({ children }: { children: ReactNode }) {
   }, [fetchOnce]);
 
   return (
-    <GamedayContext.Provider value={{ data, loading, error }}>
+    <GamedayContext.Provider value={{ data, loading, error, available }}>
       {children}
     </GamedayContext.Provider>
   );

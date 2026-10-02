@@ -553,7 +553,7 @@ Touches `app/dashboard.py`, `frontend/src/{lib/dashboardApi.ts,pages/PlayerDashb
 - ✅ **`fdb rebuild` ×2 → identical `994afb1bfb54fbf823276a951e49b3ef82d49564b4e49f21a7350be3f62732eb`, 0 network calls** (2026-10-01, run on `main` with Phase 9 and 10 merged; exit 0 both times, no FAILED scopes, the two reports identical but for the snapshot name; each loads 143 `ftnfantasy.dvoa_team` scopes plus the 83 + 5 Trinity scopes; wishlist exported and re-imported both times). **This supersedes the Phase 9 hash `ed812637…e897`**, which was taken before this table existed. After the swap: 4,318 rows in `core_ftn_dvoa_team_week` and `mart_team_dvoa_week`, `integrity_check` ok, :5000 serving 200 without a restart. ✅ 196 tests.
 - ✅ **App wiring done (same day, below).**
 
-**OPEN ITEMS (new):** (18) playoff weeks (19–22): unverified, not loaded. (19) `dvoa/player` is available if wanted (QB/RB/WR DVOA).
+**OPEN ITEMS (new):** (18) playoff weeks (19–22): unverified, not loaded. (19) `dvoa/player` is available if wanted (QB/RB/WR DVOA). (20) **Game Day live tracker: decided NOT to port (Turon, 2026-10-02).** The front end (imported in `84bb1c7`) polled `/gameday/live`, which v1 served from `app/gameday.py` + `gameday_service.py` (live MFL/Sleeper/ESPN fetched per request); v2 has no such route, so the drawer showed "404 NOT FOUND". Fix: the provider treats a 404 as "unavailable", stops polling, and the widget renders nothing (other errors still show). The widget code stays in `frontend/src/gameday/` but is inert; delete it if it should go for good.
 
 ### App wiring (Team Offense / Team Defense), 2026-10-01
 | Piece | Detail |

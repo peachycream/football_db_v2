@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { GamedayProvider } from './GamedayProvider';
+import { GamedayProvider, useGameday } from './GamedayProvider';
 import { GamedayTicker } from './GamedayTicker';
 import { GamedayButton } from './GamedayButton';
 import { GamedayDrawer } from './GamedayDrawer';
@@ -9,11 +9,22 @@ import { GamedayDrawer } from './GamedayDrawer';
 // /viz/offense) sharing one GamedayProvider fetch loop -- never a
 // double-fetch just because both the ticker and drawer are on screen.
 export function GamedayWidget() {
+  return (
+    <GamedayProvider>
+      <GamedayUi />
+    </GamedayProvider>
+  );
+}
+
+function GamedayUi() {
+  const { available } = useGameday();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
+  // v2 has no /gameday/live route yet (REBUILD_LOG: Game Day not ported): show nothing rather than a 404.
+  if (!available) return null;
   return (
-    <GamedayProvider>
+    <>
       <GamedayTicker
         onSelect={(key) => {
           setSelectedKey(key);
@@ -26,6 +37,6 @@ export function GamedayWidget() {
         selectedKey={selectedKey}
         onClose={() => setDrawerOpen(false)}
       />
-    </GamedayProvider>
+    </>
   );
 }
