@@ -521,7 +521,7 @@ Smith-Njigba 2026: tile 8.82 Elite · WR1 · thru wk 3, percentile 100, panel wi
 ### Merge notes
 Touches `app/dashboard.py`, `frontend/src/{lib/dashboardApi.ts,pages/PlayerDashboard.tsx,components/TrinityTrend.tsx}`, `app/static/viz/*` (regenerated bundle: merge by rebuilding, not by hand), `schema/024`, tests and this log. Any other branch that regenerates `app/static/viz` conflicts with it, so **whichever merges second must re-run `npm run deploy` (vite build + copy)**.
 
-## Phase 10 — FTN Fantasy team DVOA — DATA LAYER LIVE 2026-10-01; app wiring and `fdb rebuild` ×2 not done (Windows, same session)
+## Phase 10 — FTN Fantasy team DVOA — LIVE 2026-10-01; gate met: app wired, `fdb rebuild` ×2 identical (Windows, same session)
 
 ### What the source is (found by reading the page's own bundles, 2026-10-01)
 - `ftnfantasy.com/nfl/stats` is a React app over an AWS API. Logged out, every stats call is 401 and the table stays empty. **The FTN Data API (`data.ftndata.com`, `FTN_API_KEY`) has no DVOA** (guessed paths all 403 at the gateway; not brute-forced).
@@ -550,10 +550,10 @@ Touches `app/dashboard.py`, `frontend/src/{lib/dashboardApi.ts,pages/PlayerDashb
 
 ### Gate
 - ✅ Loader idempotent; `fdb weekly` path rc 0; field-name check; plausibility checks; tests.
-- ⏳ **`fdb rebuild` ×2 identical, 0 network calls: NOT RUN for this phase.** Any earlier ×2 hashes were taken without this table, so they no longer describe the DB.
+- ✅ **`fdb rebuild` ×2 → identical `994afb1bfb54fbf823276a951e49b3ef82d49564b4e49f21a7350be3f62732eb`, 0 network calls** (2026-10-01, run on `main` with Phase 9 and 10 merged; exit 0 both times, no FAILED scopes, the two reports identical but for the snapshot name; each loads 143 `ftnfantasy.dvoa_team` scopes plus the 83 + 5 Trinity scopes; wishlist exported and re-imported both times). **This supersedes the Phase 9 hash `ed812637…e897`**, which was taken before this table existed. After the swap: 4,318 rows in `core_ftn_dvoa_team_week` and `mart_team_dvoa_week`, `integrity_check` ok, :5000 serving 200 without a restart. ✅ 196 tests.
 - ✅ **App wiring done (same day, below).**
 
-**OPEN ITEMS (new):** (17) `fdb rebuild` ×2 for Phase 10. (18) playoff weeks (19–22): unverified, not loaded. (19) `dvoa/player` is available if wanted (QB/RB/WR DVOA).
+**OPEN ITEMS (new):** (18) playoff weeks (19–22): unverified, not loaded. (19) `dvoa/player` is available if wanted (QB/RB/WR DVOA).
 
 ### App wiring (Team Offense / Team Defense), 2026-10-01
 | Piece | Detail |
