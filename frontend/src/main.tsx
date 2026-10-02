@@ -13,7 +13,6 @@ const App = lazy(() => import('./App'));
 const PlayerDashboard = lazy(() => import('./pages/PlayerDashboard'));
 const TeamOffenseDashboard = lazy(() => import('./pages/TeamOffenseDashboard'));
 const TeamDefenseDashboard = lazy(() => import('./pages/TeamDefenseDashboard'));
-const GamedayWidget = lazy(() => import('./gameday/GamedayWidget').then((m) => ({ default: m.GamedayWidget })));
 const DraftBoard = lazy(() => import('./pages/DraftBoard'));
 const DraftGrades = lazy(() => import('./pages/DraftGrades'));
 const MatchupTool = lazy(() => import('./pages/MatchupTool'));
@@ -38,11 +37,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <Suspense fallback={<PageLoadingFallback />}>
       {isDraftGrades ? <DraftGrades /> : isMatchups ? <MatchupTool /> : isDraft ? <DraftBoard /> : isOffense ? <TeamOffenseDashboard /> : isDefense ? <TeamDefenseDashboard /> : isDashboard ? <PlayerDashboard /> : <App />}
-    </Suspense>
-    {/* Own Suspense boundary -- the ticker/button shouldn't block or be
-        blocked by the main page's loading fallback. */}
-    <Suspense fallback={null}>
-      <GamedayWidget />
     </Suspense>
   </React.StrictMode>,
 );
