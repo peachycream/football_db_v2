@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Matchup of the Week card - design mockup</title>
+<!--
+  DESIGN REFERENCE for Phase 11 (see PHASE11_PROMPT.md). Static mockup, NOT wired to data.
+  REAL (live MFL probe, 2026-10-03, league 30590): records 4-2 / 5-1 (each franchise plays TWO games a
+  week, so 6 games after 3 weeks), season points for 2,680.95 / 2,854.35, week-4 projected starter totals
+  1,268.37 / 1,360.19, player projections (v1 Discord post values = MFL projectedScores, per week; this
+  league scores on a large scale). STILL PLACEHOLDER: win probability (v1's 45/55), all-time series
+  (PIT 3-2) and last meeting, the position-board edges (v1 values), the takeaway wording.
+  The PIT/CIN watermarks stand in for the real franchise logos (embed as base64).
+-->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+<style>
+body{margin:0;padding:24px;background:#05070d;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+.mc{max-width:680px;margin:0 auto;background:#0d1220;border-radius:14px;overflow:hidden;color:#eef1f7;border:0.5px solid #232b40}
+.mc *{box-sizing:border-box}
+.top{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:0.5px solid #232b40;font-size:12px;color:#8e98b3}
+.pill{font-size:11px;font-weight:500;padding:3px 9px;border-radius:99px;margin-left:6px}
+.hero{position:relative;display:grid;grid-template-columns:1fr 1fr;min-height:270px;overflow:hidden}
+.wm{position:absolute;top:50%;width:330px;height:330px;margin-top:-165px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:130px;font-weight:500;letter-spacing:-4px;opacity:.2}
+.side{position:relative;z-index:2;padding:34px 18px 22px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:4px}
+.nm{font-size:20px;font-weight:500;text-shadow:0 1px 3px #000a}
+.big{font-size:52px;font-weight:500;line-height:1.05;margin-top:6px;text-shadow:0 2px 6px #000b}
+.vs{position:absolute;z-index:3;left:50%;top:50%;transform:translate(-50%,-50%);width:52px;height:52px;border-radius:50%;background:#0d1220;border:2px solid #2d3652;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500;color:#8e98b3}
+.wp{padding:14px 16px 4px}
+.bar{display:flex;height:12px;border-radius:99px;overflow:hidden}
+.sec{padding:16px 16px 0}
+.lbl{font-size:12px;color:#8e98b3;margin-bottom:10px;display:flex;justify-content:space-between}
+.row{display:grid;grid-template-columns:34px 1fr 1fr 58px;align-items:center;height:28px;font-size:12px}
+.half{height:14px;background:#161d30;position:relative}
+.fill{position:absolute;top:0;bottom:0}
+.tape{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.chip{background:#141b2e;border-radius:10px;padding:10px;font-size:12px;color:#8e98b3}
+.chip b{display:block;font-weight:500;font-size:13px;color:#eef1f7;margin-top:4px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:3px}
+.pl{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.pr{display:flex;align-items:center;gap:9px;background:#141b2e;border-radius:10px;padding:8px 10px;margin-bottom:6px;font-size:13px}
+.av{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;flex:none}
+.take{display:grid;gap:8px;padding:16px}
+.tk{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:#c9d0e2;line-height:1.5}
+.tk i{font-size:18px;margin-top:1px}
+</style>
+</head>
+<body>
+<div class="mc">
+  <div class="top">
+    <span>TINO NFL Elite · Week 4</span>
+    <span><span class="pill" style="background:#3a1d24;color:#ff9aa8">Division rivalry</span><span class="pill" style="background:#3a2f12;color:#ffd36b">Matchup of the week</span><span class="pill" style="background:#14283a;color:#8fd0ff">Preview</span></span>
+  </div>
+
+  <div class="hero">
+    <div style="position:absolute;inset:0;background:#3a2d06;clip-path:polygon(0 0,57% 0,43% 100%,0 100%)"></div>
+    <div style="position:absolute;inset:0;background:#431a0a;clip-path:polygon(57% 0,100% 0,100% 100%,43% 100%)"></div>
+    <div class="wm" style="left:-70px;border:22px solid #FFB612;color:#FFB612">PIT</div>
+    <div class="wm" style="right:-70px;border:22px solid #FB4F14;color:#FB4F14">CIN</div>
+    <div class="side">
+      <div class="nm" style="color:#FFB612">Pittsburgh Steelers</div>
+      <div style="font-size:12px;color:#f0d9a0;text-shadow:0 1px 3px #000a">4-2 · 6 games played</div>
+      <div class="big" style="color:#FFC93C">1,268.4</div>
+      <div style="font-size:11px;color:#f0d9a0">Projected</div>
+    </div>
+    <div class="side">
+      <div class="nm" style="color:#FF7A45">Cincinnati Bengals</div>
+      <div style="font-size:12px;color:#f5c2ae;text-shadow:0 1px 3px #000a">5-1 · 6 games played</div>
+      <div class="big" style="color:#FF7A45">1,360.2</div>
+      <div style="font-size:11px;color:#f5c2ae">Projected</div>
+    </div>
+    <div class="vs">VS</div>
+  </div>
+
+  <div class="wp">
+    <div class="bar"><div style="width:45%;background:#FFB612"></div><div style="width:2px;background:#0d1220"></div><div style="flex:1;background:#FB4F14"></div></div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;margin-top:6px"><span style="color:#FFB612">45% win</span><span style="color:#8e98b3">Win probability</span><span style="color:#FB4F14">55% win</span></div>
+  </div>
+
+  <div class="sec">
+    <div class="lbl"><span>Position edge · projected points</span><span><i class="ti ti-flame" style="color:#ffd36b" aria-hidden="true"></i> biggest swing</span></div>
+    <div id="board"></div>
+  </div>
+
+  <div class="sec">
+    <div class="lbl"><span>Tale of the tape</span></div>
+    <div class="tape">
+      <div class="chip">Steelers record<b style="color:#FFB612">4-2</b></div>
+      <div class="chip">Bengals record<b style="color:#FB4F14">5-1</b></div>
+      <div class="chip">Points for, season total<b><span style="color:#FFB612">2,681</span> vs <span style="color:#FB4F14">2,854</span></b></div>
+      <div class="chip">All-time series<b>PIT 3-2 · 5 meetings</b></div>
+    </div>
+    <div style="font-size:12px;color:#8e98b3;margin-top:8px">Last meeting: 2025 week 4, PIT 1,019.15 to CIN 779.55</div>
+  </div>
+
+  <div class="sec">
+    <div class="lbl"><span>Players to watch</span><span>Projected points, week 4</span></div>
+    <div class="pl">
+      <div>
+        <div class="pr"><span class="av" style="background:#FFB612;color:#2a2208">SB</span><span style="flex:1">Saquon Barkley <span style="color:#8e98b3">RB</span></span><span>100.6</span></div>
+        <div class="pr"><span class="av" style="background:#FFB612;color:#2a2208">CW</span><span style="flex:1">Christian Watson <span style="color:#8e98b3">WR</span></span><span>87.6</span></div>
+        <div class="pr"><span class="av" style="background:#FFB612;color:#2a2208">PM</span><span style="flex:1">Patrick Mahomes <span style="color:#8e98b3">QB</span></span><span>85.8</span></div>
+      </div>
+      <div>
+        <div class="pr"><span class="av" style="background:#FB4F14;color:#2e1409">JG</span><span style="flex:1">Jahmyr Gibbs <span style="color:#8e98b3">RB</span></span><span>142.3</span></div>
+        <div class="pr"><span class="av" style="background:#FB4F14;color:#2e1409">DA</span><span style="flex:1">Davante Adams <span style="color:#8e98b3">WR</span></span><span>96.0</span></div>
+        <div class="pr"><span class="av" style="background:#FB4F14;color:#2e1409">JW</span><span style="flex:1">Jaylen Warren <span style="color:#8e98b3">RB</span></span><span>94.9</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="take">
+    <div class="tk"><i class="ti ti-flame" style="color:#FB4F14" aria-hidden="true"></i><span>Biggest edge: Pittsburgh LB, +74.3 over Cincinnati's 0.</span></div>
+    <div class="tk"><i class="ti ti-bolt" style="color:#FFB612" aria-hidden="true"></i><span>Cincinnati wins the skill spots: RB +60.2, TE +34.3, WR +26.2.</span></div>
+    <div class="tk"><i class="ti ti-scale" style="color:#8fd0ff" aria-hidden="true"></i><span>Projected gap is 92 points on about 1,300 each. Close enough that lineup calls decide it.</span></div>
+  </div>
+</div>
+<script>
+var d=[["QB","PIT",6.92],["RB","CIN",60.23],["WR","CIN",26.17],["TE","CIN",34.34],["DL","PIT",15.24],["LB","PIT",74.26],["DB","CIN",3.71]];
+var C={PIT:"#FFB612",CIN:"#FB4F14"},mx=80,h="";
+d.forEach(function(r){
+ var w=Math.round(r[2]/mx*100),c=C[r[1]],L=r[1]==="PIT",top=r[2]===74.26;
+ h+='<div class="row"><span style="font-weight:500">'+r[0]+'</span>'+
+ '<div class="half" style="border-radius:7px 0 0 7px">'+(L?'<div class="fill" style="right:0;width:'+w+'%;background:'+c+';border-radius:7px 0 0 7px"></div>':'')+'</div>'+
+ '<div class="half" style="border-radius:0 7px 7px 0;border-left:1px solid #0d1220">'+(!L?'<div class="fill" style="left:0;width:'+w+'%;background:'+c+';border-radius:0 7px 7px 0"></div>':'')+'</div>'+
+ '<span style="text-align:right;color:'+c+'">'+(top?'<i class="ti ti-flame" aria-hidden="true"></i> ':'')+r[2].toFixed(1)+'</span></div>';
+});
+document.getElementById("board").innerHTML=h;
+</script>
+</body>
+</html>

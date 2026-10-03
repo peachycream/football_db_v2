@@ -79,6 +79,7 @@ class MflLoader(Loader):
 # ---------------------------------------------------------------- league ----
 class LeagueLoader(MflLoader):
     id = "mfl.league"
+    history = True   # Phase 11: matchup history needs the league's closed seasons
     table = "core_mfl_league"
     mfl_type = "league"
     warn_new_fields = False   # scalar settings subset; UI prefs deliberately not stored
@@ -121,6 +122,7 @@ class _FromLeague(MflLoader):
 
 class DivisionsLoader(_FromLeague):
     id = "mfl.divisions"
+    history = True
     table = "core_mfl_divisions"
     element, child = "divisions", "division"
 
@@ -147,6 +149,7 @@ class DivisionsLoader(_FromLeague):
 
 class ConferencesLoader(_FromLeague):
     id = "mfl.conferences"
+    history = True
     table = "core_mfl_conferences"
     element, child = "conferences", "conference"
 
@@ -168,6 +171,7 @@ class ConferencesLoader(_FromLeague):
 
 class FranchisesLoader(_FromLeague):
     id = "mfl.franchises"
+    history = True
     table = "core_mfl_franchises"
     element, child = "franchises", "franchise"
     warn_new_fields = False   # contact fields (email, phone, address) deliberately not stored
@@ -371,5 +375,138 @@ class PlayersLoader(MflLoader):
         return [] if n >= self.MIN_ROWS else [f"{scope.label}: only {n} players (truncated?)"]
 
 
+# ---------------------------------------------------------- weeklyResults ----
+class WeeklyResultsLoader(PlayerScoresLoader):
+    """One fetch (TYPE=weeklyResults&W=) feeds two tables: this one (one row per franchise PER GAME)
+    and mfl.lineups (player rows). Finality, partitions, endWeek and the heavy-endpoint spacing are
+    playerScores', inherited. History seasons are read (closed seasons are final, cached forever)."""
+    id = "mfl.weekly_results"
+    table = "core_mfl_weekly_results"
+    mfl_type = "weeklyResults"
+    endpoint = "weeklyResults"
+    history = True
+    warn_new_fields = False   # lineup lists and per-season extras (comments, spread) are not stored here
+    CALL_SPACING = 3.0
+    MAX_ABS_SCORE = 5000.0
+
+    @staticmethod
+    def _games(payload: bytes):
+        d = json.loads(payload)["weeklyResults"]
+        out = []
+        for m in api.as_list(d.get("matchup")):
+            frs = api.as_list(m.get("franchise"))
+            if len(frs) > 2:
+                raise ValueError(f"a matchup with {len(frs)} franchises")
+            out.append(frs)
+        return d.get("week"), out
+
+    def last_week(self, conn, season, league):
+        # h2h = ALL (30590's sibling TWE 55757: everyone "plays" everyone) has no matchups to report.
+        r = conn.execute("SELECT h2h FROM core_mfl_league WHERE season = ? AND league_id = ?", (season, league)).fetchone()
+        if r and r[0] != "YES":
+            return 0
+        return super().last_week(conn, season, league)
+
+    def empty_is_valid(self, conn, scope):
+        """A fantasy PLAYOFF week after the bracket is decided has no matchups (seen live: 30590 2020 wk17,
+        46276 and 60398 2025 wk18). Only after lastRegularSeasonWeek; an empty regular-season week is a failure."""
+        r = conn.execute("SELECT lastRegularSeasonWeek FROM core_mfl_league WHERE season = ? AND league_id = ?",
+                         (scope.season, scope.league)).fetchone()
+        return bool(r and r[0] and scope.week > r[0])
+
+    def parse(self, payload):
+        week, games = self._games(payload)
+        if not games:   # the source's own answer is "no games": nothing to contradict the contract
+            return self.expected_fields(), []
+        rows = []
+        for frs in games:
+            for f in frs:
+                other = [o["id"] for o in frs if o is not f]
+                rows.append({**{k: v for k, v in f.items() if k != "player"}, "week": week,
+                             "opponent_id": other[0] if other else ""})
+        return sorted({k for frs in games for f in frs for k in f}), rows
+
+    def checks(self, conn, scope):
+        q = (scope.season, scope.league, scope.week)
+        rows = conn.execute("""SELECT id, opponent_id, score, result FROM core_mfl_weekly_results
+                               WHERE season = ? AND league_id = ? AND week = ?""", q).fetchall()
+        fails = []
+        nulls = [r for r in rows if r["score"] is None]
+        if nulls:
+            fails.append(f"{scope.label}: {len(nulls)} rows without a score (an unplayed week reads result=T, no score)")
+        by = {(r["id"], r["opponent_id"]): r for r in rows}
+        scores = defaultdict(set)
+        for r in rows:
+            if r["score"] is None:
+                continue
+            scores[r["id"]].add(r["score"])
+            if abs(r["score"]) > self.MAX_ABS_SCORE:
+                fails.append(f"{scope.label}: franchise {r['id']} score {r['score']} outside +-{self.MAX_ABS_SCORE:g}")
+            if r["opponent_id"] == "":
+                continue
+            rev = by.get((r["opponent_id"], r["id"]))
+            if rev is None:
+                fails.append(f"{scope.label}: {r['id']} vs {r['opponent_id']} has no mirror row")
+            elif rev["score"] is not None:
+                want = "W" if r["score"] > rev["score"] else "L" if r["score"] < rev["score"] else "T"
+                if r["result"] != want:
+                    fails.append(f"{scope.label}: {r['id']} vs {r['opponent_id']} result {r['result']!r} but scores say {want!r}")
+        for fid, sc in scores.items():
+            if len(sc) > 1:
+                fails.append(f"{scope.label}: franchise {fid} has different scores in its games: {sorted(sc)}")
+        known = {r[0] for r in conn.execute("SELECT id FROM core_mfl_franchises WHERE season = ? AND league_id = ?", q[:2])}
+        if known:
+            stray = sorted({r["id"] for r in rows} - known)
+            if stray:
+                fails.append(f"{scope.label}: franchises not in core_mfl_franchises: {stray}")
+        return fails
+
+
+class LineupsLoader(WeeklyResultsLoader):
+    """Reads mfl.weekly_results' raw file: franchise.player[] -> one row per franchise-week-player."""
+    id = "mfl.lineups"
+    table = "core_mfl_lineups"
+    fetches = False
+
+    def parse(self, payload):
+        week, games = self._games(payload)
+        if not games:
+            return self.expected_fields(), []
+        rows, seen = [], {}
+        for frs in games:
+            for f in frs:
+                ps = api.as_list(f.get("player"))
+                sig = sorted((p["id"], p.get("status")) for p in ps)
+                if f["id"] in seen:   # a franchise's games share one lineup; a difference is a source invariant
+                    if seen[f["id"]] != sig:
+                        raise ValueError(f"franchise {f['id']} has different lineups in its games")
+                    continue
+                seen[f["id"]] = sig
+                listed = {x for x in (f.get("starters") or "").split(",") if x}
+                if listed != {p["id"] for p in ps if p.get("status") == "starter"}:
+                    raise ValueError(f"franchise {f['id']}: `starters` disagrees with the players marked starter")
+                rows += [{**p, "franchise_id": f["id"], "week": week} for p in ps]
+        return sorted({k for r in rows for k in r} - {"franchise_id", "week"}), rows
+
+    def checks(self, conn, scope):
+        q = (scope.season, scope.league, scope.week)
+        fails = []
+        # reconciliation with the franchise's own score: starters' scores + adjustment == score
+        bad = conn.execute("""SELECT w.id, w.score, w.adj_score, s.total FROM
+                (SELECT id, MAX(score) score, MAX(COALESCE(adj_score, 0)) adj_score FROM core_mfl_weekly_results
+                 WHERE season = ? AND league_id = ? AND week = ? GROUP BY id) w
+              JOIN (SELECT franchise_id, SUM(score) total FROM core_mfl_lineups
+                    WHERE season = ? AND league_id = ? AND week = ? AND status = 'starter' GROUP BY franchise_id) s
+                ON s.franchise_id = w.id
+              WHERE ABS(s.total + w.adj_score - w.score) > 0.011""", q + q).fetchall()
+        if bad:
+            fails.append(f"{scope.label}: starters' scores do not add to the franchise score for {[tuple(b) for b in bad[:3]]}")
+        have = conn.execute("SELECT COUNT(DISTINCT id) FROM core_mfl_weekly_results WHERE season = ? AND league_id = ? AND week = ?", q).fetchone()[0]
+        got = conn.execute("SELECT COUNT(DISTINCT franchise_id) FROM core_mfl_lineups WHERE season = ? AND league_id = ? AND week = ?", q).fetchone()[0]
+        if have and have != got:
+            fails.append(f"{scope.label}: {have} franchises in weekly_results but {got} with a lineup")
+        return fails
+
+
 LOADERS = (LeagueLoader, DivisionsLoader, ConferencesLoader, FranchisesLoader, RostersLoader,
-           RulesLoader, PlayerScoresLoader, PlayersLoader)
+           RulesLoader, PlayerScoresLoader, PlayersLoader, WeeklyResultsLoader, LineupsLoader)

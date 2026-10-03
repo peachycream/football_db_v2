@@ -13,6 +13,9 @@ league_id = "30590"
 name = "TINO NFL Elite"
 my_franchise = "0021"
 seasons = [2025, 2026]
+# The league began in 2020 (MFL: "Invalid league ID" for 2019; verified 2026-10-03). Phase 11 reads
+# these closed seasons for matchup history only (loaders with `history = True`).
+history_seasons = [2020, 2021, 2022, 2023, 2024]
 
 [[league]]
 platform = "mfl"
