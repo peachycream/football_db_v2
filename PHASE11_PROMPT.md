@@ -1,6 +1,6 @@
 # Phase 11 kickoff — Matchup of the Week card (data + render)
 
-> **STATUS 2026-10-03: §2.1 steps 1–3 and 5 are BUILT and gated (`mfl.weekly_results`, `mfl.lineups`, history 2020+; see the Phase 11 entry in `REBUILD_LOG.md`). Resume at the projections loader (§2.1 step 4), then §2.2, §2.3.** Decided by Turon: the featured game is the *picked* pairing (v1's selector), and the card shows that pairing only.
+> **STATUS 2026-10-03: §2.1 steps 1–3 and 5 are BUILT and gated (`mfl.weekly_results`, `mfl.lineups`, history 2020+; see the Phase 11 entry in `REBUILD_LOG.md`). `mfl.projected_scores` is built too (§2.1 step 4). Resume at §2.2 (`mart_matchup_card`, now `schema/027`), then §2.3. The card has PREVIEW and FINAL (recap) states; actuals come from `core_mfl_weekly_results` + `core_mfl_lineups`, projections from the last snapshot before kickoff.** Decided by Turon: the featured game is the *picked* pairing (v1's selector), and the card shows that pairing only.
 
 Run LOCALLY on Windows (MFL is unreachable from the cloud container). Paste everything below the line as the first message of a **new** session.
 
@@ -44,7 +44,7 @@ v1's Discord "Matchup of the Week" card (Steelers vs Bengals, TINO NFL Elite, 20
 4. **`mfl.projected_scores`** only if the card needs player projections that `core_mfl_player_scores` cannot give. It is current-state: never final until the week is, keep-3 policy like other current-state feeds. (v1 used it for the position board and win probability.)
 5. **Weekly job (rule 11):** both loaders get `weekly = true` in the registry in this phase and the rows in `registry/sources.toml`. Every one idempotent (`fdb check`).
 
-### 2.2 Mart: `mart_matchup_card` (`schema/026`; 025 is the weekly-results core tables, 024 Trinity, 023 DVOA)
+### 2.2 Mart: `mart_matchup_card` (`schema/027`; 026 is projected scores, 025 the weekly-results core tables, 024 Trinity)
 One row per `(season, league_id, week, matchup)`; apps and the Discord job read **only** this.
 - `state` ∈ `PREVIEW | LIVE | FINAL`, derived from the schedule, never from "score is 0".
 - Records **through the week before** (W/L/T from the scores of weeks < week); points for/against; last-3 form; division standing; `is_division_rivalry` from `core_mfl_divisions`.
