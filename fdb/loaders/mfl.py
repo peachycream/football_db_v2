@@ -9,6 +9,7 @@ from collections import defaultdict
 from datetime import timedelta
 
 from .. import config, mfl as api, schedule
+from ..raw import records as raw_records
 from ..loader import Loader, Scope
 from ..timeutil import eastern_to_utc, utcnow
 
@@ -508,5 +509,91 @@ class LineupsLoader(WeeklyResultsLoader):
         return fails
 
 
+# ------------------------------------------------------- projectedScores ----
+class ProjectedScoresLoader(MflLoader):
+    """Snapshots of MFL's per-player weekly projections: one raw file per fetch (daily retention), one scope
+    per raw file. Only the NEXT unplayed regular-season week is fetched, every run, because its projections
+    move. A COMPLETED week is deliberately NOT fetched: the first live load showed that after the games MFL's
+    list is a partial one (30590 wk3: 895 players vs 1,007 for unplayed wk4; 166 of 896 starters, scoring up
+    to 91, had no projection), so a post-game fetch is not the pre-game projection. The mart uses, per week,
+    the last snapshot taken before that week's first kickoff."""
+    id = "mfl.projected_scores"
+    table = "core_mfl_projected_scores"
+    mfl_type = "projectedScores"
+    endpoint = "projectedScores"
+    grain = "league_snapshot"
+    raw_retention = "daily"
+    MIN_PLAYERS = 100
+    MAX_ABS_SCORE = 1000.0
+    MAX_BLANK = 0.05
+
+    def partition(self, scope):
+        return f"{scope.season}/{scope.league}/{scope.season_type}{scope.week:02d}"
+
+    @staticmethod
+    def _week_of(partition: str) -> int:
+        return int(partition.rsplit("/", 1)[1][3:])
+
+    def fetch(self, partition):
+        season, league = self._split(partition)
+        return api.export(season, league, self.mfl_type, W=self._week_of(partition))
+
+    def raw_is_final(self, conn, partition):
+        return False   # a current-state feed: there is no moment at which it stops changing in a way we can rely on
+
+    def snapshot_bases(self, conn, season, league, fetching):
+        if not fetching:   # every week that has a raw file
+            weeks = {self._week_of(r.partition) for r in raw_records(self.source, self.endpoint, f"{season}/{league}")}
+            return [Scope(season, "REG", w, league=league) for w in sorted(weeks)]
+        if season != schedule.current_season(conn):
+            return []
+        done = {w for t, w in schedule.completed_weeks(conn, season) if t == "REG"}
+        reg = [r[0] for r in conn.execute("SELECT DISTINCT week FROM core_schedule WHERE season = ? AND season_type = 'REG' "
+                                          "ORDER BY week", (season,))]
+        end = conn.execute("SELECT endWeek FROM core_mfl_league WHERE season = ? AND league_id = ?", (season, league)).fetchone()
+        end = end[0] if end and end[0] else None   # W past endWeek answers another week (see playerScores)
+        nxt = next((w for w in reg if w not in done and (end is None or w <= end)), None)
+        return [Scope(season, "REG", nxt, league=league)] if nxt is not None else []
+
+    def parse(self, payload):
+        d = json.loads(payload)["projectedScores"]
+        rows = [{**r, "week": d.get("week")} for r in api.as_list(d.get("playerScore"))]
+        return sorted({k for r in rows for k in r} - {"week"}), rows
+
+    def scope_rows(self, rows, scope):
+        wrong = {r.get("week") for r in rows} - {str(scope.week)}
+        if wrong:
+            raise ValueError(f"{scope.label}: MFL returned week(s) {sorted(wrong)} for W={scope.week}")
+        # Every live response ends with ONE placeholder {"id": "", "score": ""} (found on the first live load, 2026-10-03:
+        # NOT NULL on id). It names nobody, so it is not a row; a blank id WITH a score would be, and is refused.
+        keep = [r for r in rows if r.get("id") or r.get("score") not in ("", None)]
+        if any(not r.get("id") for r in keep):
+            raise ValueError(f"{scope.label}: a projection with a score but no player id")
+        return keep
+
+    def scope_where(self, scope):
+        return ("season = ? AND league_id = ? AND week = ? AND snapshot_at = ?",
+                (scope.season, scope.league, scope.week, scope.snapshot))
+
+    def derive(self, row):
+        return {"season": self.scope.season, "season_type": self.scope.season_type, "league_id": self.scope.league,
+                "snapshot_at": self.scope.snapshot}
+
+    def checks(self, conn, scope):
+        where, params = self.scope_where(scope)
+        n, blank, big, top = conn.execute(f"""SELECT COUNT(*), SUM(score IS NULL), SUM(ABS(score) > ?), MAX(score)
+                                              FROM core_mfl_projected_scores WHERE {where}""", (self.MAX_ABS_SCORE, *params)).fetchone()
+        fails = []
+        if n < self.MIN_PLAYERS:
+            fails.append(f"{scope.label}: only {n} projected players (not posted yet?)")
+        if n and blank / n > self.MAX_BLANK:
+            fails.append(f"{scope.label}: {blank} of {n} projections are blank")
+        if big:
+            fails.append(f"{scope.label}: {big} projections beyond +-{self.MAX_ABS_SCORE:g}")
+        if n and (top or 0) <= 0:
+            fails.append(f"{scope.label}: no positive projection at all")
+        return fails
+
+
 LOADERS = (LeagueLoader, DivisionsLoader, ConferencesLoader, FranchisesLoader, RostersLoader,
-           RulesLoader, PlayerScoresLoader, PlayersLoader, WeeklyResultsLoader, LineupsLoader)
+           RulesLoader, PlayerScoresLoader, PlayersLoader, WeeklyResultsLoader, LineupsLoader, ProjectedScoresLoader)

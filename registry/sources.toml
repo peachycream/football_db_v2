@@ -181,6 +181,15 @@ source = "MFL TYPE=weeklyResults franchise.player[] (reads mfl.weekly_results' r
 grain = "league_week"
 weekly = true
 
+# Phase 11: per-player per-week projections under the league's scoring. Current-state feed: a snapshot per
+# fetch for the next unplayed week; the last completed week gets one final fetch. History is not backfilled.
+[[table]]
+name = "core_mfl_projected_scores"
+owner = "mfl.projected_scores"
+source = "MFL export TYPE=projectedScores&W=<week> (snapshots)"
+grain = "league_snapshot"
+weekly = true
+
 [[table]]
 name = "core_sleeper_league"
 owner = "sleeper.league"

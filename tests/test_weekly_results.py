@@ -282,6 +282,118 @@ class HistoryScopes(unittest.TestCase):
                 self.assertEqual(leagues.for_platform("mfl")[0].history_seasons, (2025,))
 
 
+def proj_payload(week, n=150, blank=0, scale=0.7):
+    rows = [{"id": f"{i:05d}", "score": "" if i < blank else str(round(i * scale, 2))} for i in range(1, n + 1)]
+    return {"version": "1.0", "projectedScores": {"week": str(week), "playerScore": rows}}
+
+
+class Projections(unittest.TestCase):
+    """Phase 11: mfl.projected_scores. NOW = 2026-09-26: weeks 1-2 complete, week 3 is next."""
+
+    def at(self, stamp):
+        return mock.patch.dict(os.environ, {"FDB_NOW": stamp})
+
+    def test_parse_blank_score_and_single_bare_object(self):
+        one = {"projectedScores": {"week": "3", "playerScore": {"id": "13589", "score": ""}}}
+        fields, rows = get("mfl.projected_scores").parse(json.dumps(one).encode())
+        self.assertEqual((fields, rows), (["id", "score"], [{"id": "13589", "score": "", "week": "3"}]))
+
+    def test_fetches_only_the_next_unplayed_week(self):
+        """A completed week's list is partial after the games (live, wk3), so it is never fetched."""
+        with Env() as env:
+            env.seed({})
+            self.assertEqual(fw.fetch_partitions(env.c, get("mfl.projected_scores")), ["2026/11111/REG03"])
+
+    def test_week_past_end_week_is_not_requested(self):
+        lg = mfl_league()
+        lg["league"]["endWeek"] = "2"
+        with Env() as env:
+            write_raw("mfl", "league", "2026/11111", lg)
+            for lid in ("mfl.league", "mfl.divisions", "mfl.conferences", "mfl.franchises"):
+                env.load_all(lid)
+            self.assertEqual(fw.fetch_partitions(env.c, get("mfl.projected_scores")), [])   # week 3 > endWeek: MFL would answer another week
+
+    def test_never_final(self):
+        with Env() as env:
+            ld = get("mfl.projected_scores")
+            self.assertFalse(ld.raw_is_final(env.c, "2026/11111/REG02"))
+            self.assertFalse(ld.raw_is_final(env.c, "2026/11111/REG03"))
+
+    def test_every_fetch_of_an_unplayed_week_is_a_snapshot(self):
+        with Env() as env:
+            env.seed({})
+            with self.at("2026-09-26T17:00:00Z"):
+                write_raw("mfl", "projectedScores", "2026/11111/REG03", proj_payload(3))
+            with self.at("2026-09-27T09:00:00Z"):
+                write_raw("mfl", "projectedScores", "2026/11111/REG03", proj_payload(3, scale=0.8))
+            res = env.load_all("mfl.projected_scores")
+            self.assertEqual(len(res), 2)
+            for r in res:
+                self.assertEqual(r["failures"], [], r)
+            snaps = env.c.execute("SELECT snapshot_at, COUNT(*), MAX(score) FROM core_mfl_projected_scores GROUP BY 1 ORDER BY 1").fetchall()
+            self.assertEqual([(s[1], s[2]) for s in snaps], [(150, 105.0), (150, 120.0)])   # history kept: the numbers moved
+            self.assertEqual({r[0] for r in env.c.execute("SELECT week FROM core_mfl_projected_scores")}, {3})
+
+    def test_reload_is_idempotent(self):
+        with Env() as env:
+            env.seed({})
+            write_raw("mfl", "projectedScores", "2026/11111/REG03", proj_payload(3))
+            env.load_all("mfl.projected_scores")
+            ld = get("mfl.projected_scores")
+            ok, _, _ = fw.check_idempotent(env.c, ld, fw.scopes(env.c, ld)[0])
+            self.assertTrue(ok)
+
+    def test_payload_for_another_week_is_refused(self):
+        with Env() as env:
+            env.seed({})
+            write_raw("mfl", "projectedScores", "2026/11111/REG03", proj_payload(2))   # W=3 answered with week 2
+            res = env.load_all("mfl.projected_scores")[0]
+            self.assertFalse(res["applied"])
+            self.assertTrue(any("week(s)" in f for f in res["failures"]), res["failures"])
+
+    def test_too_few_players_and_too_many_blanks_fail(self):
+        with Env() as env:
+            env.seed({})
+            write_raw("mfl", "projectedScores", "2026/11111/REG03", proj_payload(3, n=40))
+            res = env.load_all("mfl.projected_scores")[0]
+            self.assertTrue(any("only 40 projected players" in f for f in res["failures"]), res["failures"])
+        with Env() as env:
+            env.seed({})
+            write_raw("mfl", "projectedScores", "2026/11111/REG03", proj_payload(3, blank=40))
+            res = env.load_all("mfl.projected_scores")[0]
+            self.assertTrue(any("projections are blank" in f for f in res["failures"]), res["failures"])
+
+    def test_implausible_score_fails(self):
+        with Env() as env:
+            env.seed({})
+            write_raw("mfl", "projectedScores", "2026/11111/REG03", proj_payload(3, scale=20.0))   # 150 * 20 = 3000
+            res = env.load_all("mfl.projected_scores")[0]
+            self.assertTrue(any("beyond +-1000" in f for f in res["failures"]), res["failures"])
+
+    def test_empty_placeholder_entry_is_not_a_row_but_a_score_without_an_id_is_refused(self):
+        """Live: every response ends with {"id": "", "score": ""} (found by a NOT NULL failure on the first load)."""
+        with Env() as env:
+            env.seed({})
+            pay = proj_payload(3)
+            pay["projectedScores"]["playerScore"].append({"id": "", "score": ""})
+            write_raw("mfl", "projectedScores", "2026/11111/REG03", pay)
+            res = env.load_all("mfl.projected_scores")[0]
+            self.assertEqual(res["failures"], [], res)
+            self.assertEqual(res["rows"], 150)
+        with Env() as env:
+            env.seed({})
+            pay = proj_payload(3)
+            pay["projectedScores"]["playerScore"].append({"id": "", "score": "12.5"})
+            write_raw("mfl", "projectedScores", "2026/11111/REG03", pay)
+            res = env.load_all("mfl.projected_scores")[0]
+            self.assertFalse(res["applied"])
+            self.assertTrue(any("no player id" in f for f in res["failures"]), res["failures"])
+
+    def test_registered_weekly_after_the_results_loaders(self):
+        from fdb import registry
+        self.assertIn("mfl.projected_scores", registry.weekly_loaders())
+
+
 class Registry(unittest.TestCase):
     def test_both_tables_are_owned_and_weekly_in_order(self):
         from fdb import registry

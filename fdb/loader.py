@@ -12,7 +12,7 @@ in v1 when loaders decided it for themselves:
 """
 import json
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from . import config, raw, registry, schedule
 from .db import columns, table_hash
@@ -104,6 +104,11 @@ class Loader:
         one ONLY where the source itself says empty is the truth (e.g. an MFL league
         whose pools are not conferences has no conferences)."""
         return False
+    def snapshot_bases(self, conn: sqlite3.Connection, season: int, league: str, fetching: bool) -> list["Scope"]:
+        """league_snapshot grain: the bases whose raw partitions are scopes (fetching=False) or that a
+        fetch should request (fetching=True). Default: one base per (season, league). A snapshot feed
+        that is also per week (projections) returns one base per week."""
+        return [Scope(season, league=league)]
     def reference_seasons(self, rows: list[dict]) -> list[int]:
         raise NotImplementedError  # reference grain only
 
@@ -208,8 +213,9 @@ def _league_scopes(conn, loader: Loader, seasons: list[int] | None) -> list[Scop
         return out
     out = []
     for s, l in pairs:
-        for rec in raw.records(loader.source, loader.endpoint, loader.partition(Scope(s, league=l))):
-            out.append(Scope(s, league=l, snapshot=rec.path.rsplit("/", 1)[1].split(".")[0]))
+        for base in loader.snapshot_bases(conn, s, l, False):
+            for rec in raw.records(loader.source, loader.endpoint, loader.partition(base)):
+                out.append(replace(base, snapshot=rec.path.rsplit("/", 1)[1].split(".")[0]))
     return out
 
 
@@ -222,8 +228,8 @@ def fetch_partitions(conn, loader: Loader, seasons: list[int] | None = None) -> 
         from . import leagues
         cur = schedule.current_season(conn)
         want = seasons or ([cur] if cur else [])
-        return sorted({loader.partition(Scope(s, league=lg.league_id)) for lg in leagues.for_platform(loader.source)
-                       for s in lg.seasons if s in want})
+        return sorted({loader.partition(b) for lg in leagues.for_platform(loader.source)
+                       for s in lg.seasons if s in want for b in loader.snapshot_bases(conn, s, lg.league_id, True)})
     return sorted({loader.partition(s) for s in scopes(conn, loader, seasons)})
 
 
