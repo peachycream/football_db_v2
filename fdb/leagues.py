@@ -16,6 +16,7 @@ class League:
     name: str
     my_franchise: str
     seasons: tuple[int, ...]
+    history_seasons: tuple[int, ...] = ()   # EXTRA closed seasons, read only by loaders with `history = True`
 
 
 def load() -> list[League]:
@@ -24,7 +25,8 @@ def load() -> list[League]:
     out, seen = [], set()
     for r in rows:
         lg = League(r["platform"], str(r["league_id"]), r["name"], str(r["my_franchise"]),
-                    tuple(int(s) for s in r["seasons"]))
+                    tuple(int(s) for s in r["seasons"]),
+                    tuple(int(s) for s in r.get("history_seasons", ())))
         if lg.platform not in PLATFORMS:
             raise ValueError(f"{PATH.name}: unknown platform {lg.platform!r}")
         if (lg.platform, lg.league_id) in seen:

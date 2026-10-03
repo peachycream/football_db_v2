@@ -165,6 +165,22 @@ source = "MFL export TYPE=playerScores&W=<week> (reported points)"
 grain = "league_week"
 weekly = true
 
+# Phase 11: one TYPE=weeklyResults&W= fetch feeds both tables (mfl.lineups reads mfl.weekly_results' raw).
+# A franchise can play several games a week (30590: two): one row per franchise PER GAME.
+[[table]]
+name = "core_mfl_weekly_results"
+owner = "mfl.weekly_results"
+source = "MFL export TYPE=weeklyResults&W=<week>, franchise scalars + opponent (reported results)"
+grain = "league_week"
+weekly = true
+
+[[table]]
+name = "core_mfl_lineups"
+owner = "mfl.lineups"
+source = "MFL TYPE=weeklyResults franchise.player[] (reads mfl.weekly_results' raw)"
+grain = "league_week"
+weekly = true
+
 [[table]]
 name = "core_sleeper_league"
 owner = "sleeper.league"

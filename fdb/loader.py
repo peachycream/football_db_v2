@@ -67,6 +67,7 @@ class Loader:
     max_week: int | None = None   # week grains: highest schedule week offered (a source that stops at week 17)
     closed_seasons_only: bool = False  # season grain: offer only seasons whose Super Bowl is final
     unavailable: dict = {}        # week grains: {(season, season_type, week): reason} the SOURCE is known to serve wrongly; never offered
+    history: bool = False         # league grains: also read the league's `history_seasons` (config), not just `seasons`
     publish_grace_days: int = 0   # >0: a lagged feed; NotPublished within this many days of the week going final is PENDING
 
     # Grains: 'snapshot' | 'reference' | 'season' | 'week' (nflverse), and the league
@@ -195,7 +196,7 @@ def _league_scopes(conn, loader: Loader, seasons: list[int] | None) -> list[Scop
     from . import leagues
     known = set(schedule.seasons_loaded(conn))
     pairs = [(s, lg.league_id) for lg in leagues.for_platform(loader.source)
-             for s in lg.seasons if s in known and (not seasons or s in seasons)]
+             for s in (lg.seasons + (lg.history_seasons if loader.history else ())) if s in known and (not seasons or s in seasons)]
     if loader.grain == "league":
         return [Scope(s, league=l) for s, l in pairs]
     if loader.grain == "league_week":

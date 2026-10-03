@@ -562,3 +562,40 @@ Touches `app/dashboard.py`, `frontend/src/{lib/dashboardApi.ts,pages/PlayerDashb
 | Front end | Header chip, trend card and a sortable league-table column on both pages ("DVOA" / "DVOA allowed", shown as +x.x%). Types in `lib/offenvApi.ts`, `lib/defenvApi.ts`. Built with `vite build` and copied to `app/static/viz` (`tsc -b` has one existing error, `PlayerDashboard.tsx` imports `esm.sh/html2canvas-pro`; none in the changed files) |
 | Verified | Flask test client: a one-week window equals the raw weekly value (KC wk7 0.2611 / −0.3049); KC 2025 season 0.053 weighted vs 0.036 plain mean. Live :5000 after restarting the app process: BUF 2026 wks 1–3 shows offense DVOA +37.0% (#2/32) and DVOA allowed +3.4% (#21/32); both match a hand calculation from the DB (52/66/62 plays; 73/62/64 plays faced). 186 tests |
 | Notes | The number is **play-weighted weekly DVOA, not FTN's own opponent-adjusted season DVOA** (FTN's multi-week figure cannot be rebuilt from single weeks); the tiles and column say "DVOA" and this log is where the difference is written. 2022 wk5 has none (source gap), so a 2022 season figure covers 17 weeks. |
+
+## Phase 11 — Matchup of the Week: data + card — DATA LAYER BUILT 2026-10-03 (Windows, same session); mart, projections and render NOT built
+
+Turon asked for a redesign of the v1 Discord "Matchup of the Week" card after its week-4 post (Steelers vs Bengals, 30590) showed records 0-0, scores 0.00, "FINAL" and an all-time series built from partial history. Kickoff prompt `PHASE11_PROMPT.md`; design reference `docs/matchup_card_mockup.html` (real figures from this phase's data; win probability and position-board edges still v1's). **Decided by Turon: the featured game is the picked pairing (v1's selector), card shows that pairing only.**
+
+### Causes found by reading v1 (not run)
+(1) `_records`/`_series` read cache only (`fetch=False`); (2) `mfl_weekly_results` caches any non-empty payload 30 days, including an in-progress week; (3) wins counted only from MFL's `result` flag; (4) `scouting_weekly_job.py` uses the auto-detected CURRENT week for the recap as well as the preview, so a Monday recap targeted unplayed week 4; (5) the card never checks game state; (6) prose is generated separately from the numbers.
+
+### Live probe facts (each measured on league 30590)
+- **Each franchise plays TWO games a week** (32 franchises, 32 matchups, same score in both games; 2026 after wk3 = 6 games: Steelers 4-2, Bengals 5-1). Count games per row, points once per week.
+- An unplayed week has no `score`/`opt_pts` and `result` = "T" for every franchise.
+- `projectedScores` is per-player per-week (v1's 100+ player values are real: this league scores big, team weeks 650-1,170). My first suspicion that v1 showed whole-roster values was wrong. Steelers' projected starters wk4: 1,268.37 vs Bengals 1,360.19 (v1's card said a 28.03 gap; unexplained).
+- The league began in **2020** (MFL: Invalid league ID for 2019); field names are stable 2020-2026 (`comments` extra in 2020, `adj_score` in 2021).
+- Starters' scores + `adj_score` equal the franchise score exactly in every loaded week (2021 wk1: two franchises carry a -1000 commissioner adjustment, already inside `score`).
+- `h2h = ALL` (TWE 55757) has no matchups; fantasy playoff weeks after the bracket is decided have none either (30590 2020 wk17; 46276 and 60398 2025 wk18).
+
+### Built
+| Piece | Where |
+|---|---|
+| Loaders | `mfl.weekly_results` -> `core_mfl_weekly_results` (one row per franchise PER GAME: `id`, `opponent_id`, `isHome`, `score`, `adj_score`, `result`, `opt_pts`); `mfl.lineups` -> `core_mfl_lineups` (franchise-week-player: `status`, `shouldStart`, `score`), reading the first loader's raw (one fetch, two tables). `schema/025`, contracts `mfl.weekly_results.fields`, `mfl.lineups.fields`, registry rows, both `weekly = true` (fetcher before reader) |
+| Framework | `League.history_seasons` + `Loader.history`: the config's EXTRA closed seasons (30590: 2020-2024) are read only by loaders that opt in (`mfl.league/divisions/conferences/franchises/weekly_results/lineups`); `player_scores`, `rosters` etc. still read only `seasons` |
+| Checks (in the transaction) | every row has a score; each game has a mirror row; `result` agrees with the scores; one franchise = one score across its games; franchise ids exist in `core_mfl_franchises`; |score| <= 5000; lineups: `starters` = players marked starter, a franchise's games share one lineup, starters' scores + `adj_score` = score, same franchise count as results. Non-h2h leagues offer no weeks; an empty week is valid only after `lastRegularSeasonWeek` |
+| Tests | 24 new (`tests/test_weekly_results.py`); suite 220 |
+
+### Loaded (live DB)
+`core_mfl_weekly_results` 9,990 rows, `core_mfl_lineups` 424,543 rows, 188 scopes each: 30590 2020-2026 wk1-3, and the other leagues' 2025-2026 (TWE excluded). League history 2020-2024 for `league/divisions/conferences/franchises` (32 franchises, 8 divisions each). A snapshot was taken first: `database/pre_phase11_20261003.db` (gitignored). MFL 429'd twice during the backfill (heavy endpoint, 3 s spacing); the framework's cooldown + re-run finished it with no manual edit.
+
+### Gate
+- ✅ Both loaders: contract recorded from live responses; idempotent (`fdb check --loader`); in `fdb weekly` (registered; the first scheduled run is Wed 2026-10-07 05:00); live runs OK.
+- ✅ **Records vs MFL's own standings (30590 2025, regular season weeks <= 13): W-L-T identical for all 32 franchises (26 games each).** Points: MFL's `pf` is NOT comparable (it counts every game, playoffs included, and appears to include a week where the franchise has no matchup row; not verified), so "points for" on the card is defined here as each regular-season week counted once. 2026 through wk3: Steelers 2,680.95, Bengals 2,854.35.
+- ✅ **Series, Steelers (0029) vs Bengals (0003), 2020-2025 regular season: 13 meetings, Pittsburgh 4-9; last meeting 2025 wk4 1,019.15 to 779.55 (equals v1's own "last meeting" line).** v1's "tied 1-1, 2 meetings" was its cache gap.
+- ✅ **`fdb rebuild` x2 -> identical `5a36ccbe35da5d3b925044d50f3f59d961271255f6c1bc64e096e0719dfde751`, 0 network calls**, `integrity_check` ok. This supersedes the Phase 9+10 hash. 220 tests.
+- ⏳ Not yet: the 3-rivalry hand check beyond Steelers-Bengals; a Turon review of rendered cards.
+
+**Not built (next):** (a) `mfl.projected_scores` (current-state, per-player per-week; the preview needs the UPCOMING week, which the completed-weeks scopes do not offer, so it needs its own scope rule); (b) `mart_matchup_card` (`schema/026`) with state, records through week N (regular season only, <= `lastRegularSeasonWeek`), series, position groups, top starters via `player_ids(mfl)`; (c) renderer; (d) the week-selection fix. Nothing was posted to Discord.
+
+**OPEN ITEMS (new):** (21) Phase 11 remainder, above. (22) v1 Scouting tasks keep posting the broken card until replaced. (23) Turon: should the card's "points for" be the once-per-week total (2,681) or MFL's per-game figure? (24) The weekly job now fetches `weeklyResults` for 5 MFL leagues (not only 30590); empty playoff weeks are re-fetched each run (never final). Say if only 30590 is wanted. (25) Franchise id -> owner stability across 2020-2025 is assumed from MFL ids (names match for 0003/0029); not audited for all 32.
