@@ -117,6 +117,8 @@ def cmd_alerts(a):
         return alerts.test_push()
     conn = _conn()
     try:
+        if a.watch:
+            return alerts.watch(conn, send=a.send, poll_s=a.poll_seconds, horizon_h=a.horizon_hours)
         return alerts.run(conn, do_refresh=a.refresh, send=a.send, seed=a.seed)
     finally:
         conn.close()
@@ -165,6 +167,10 @@ def main(argv=None):
     s.add_argument("--refresh", action="store_true", help="re-fetch the NFL and MFL injury feeds first (network reads)")
     s.add_argument("--seed", action="store_true", help="record the current statuses as the baseline; sends nothing")
     s.add_argument("--send", action="store_true", help="push the changes to ntfy (needs NTFY_TOPIC in .env) and record them")
+    s.add_argument("--watch", action="store_true", help="poll ESPN every --poll-seconds inside each game's window (2 h before kickoff "
+                   "until kickoff), exit when no window opens within --horizon-hours; with --send it also pushes the 15-minute final check")
+    s.add_argument("--poll-seconds", type=int, default=120)
+    s.add_argument("--horizon-hours", type=float, default=14)
     s.add_argument("--test-push", action="store_true", help="send ONE test notification and nothing else")
     s.set_defaults(fn=cmd_alerts)
     sub.add_parser("parity-ownership", help="Phase 3 gate: /ownership/ owners vs the v1 oracle (see fdb/parity.py)")

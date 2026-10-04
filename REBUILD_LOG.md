@@ -681,3 +681,41 @@ First run is a silent baseline (`--seed`), and `--send` refuses before one exist
 Inactive list (~90 min pre-kickoff) and kickoff-relative fast polling (the nflverse file is too slow for game-day); news/RSS feeds; lineup awareness (MFL `core_mfl_upcoming_lineups`, Sleeper starters) so starters outrank bench; Task Scheduler entry (model: `ops\daily_rosters.bat`); Yahoo (OAuth) and CBS (Playwright login) rosters, which need league ids from Turon.
 
 **OPEN ITEMS (new):** (30) Turon: set `NTFY_TOPIC`, run `fdb alerts --test-push`, then `--seed`. (31) Measure how often nflverse updates the injuries file before relying on it. (32) Yahoo/CBS league names and ids.
+
+## Phase 13 - Player status alerts, part B: game-day inactives and pre-kickoff polling (2026-10-04)
+
+Turon asked for inactives and polling up to 15 min before each game. Built on Phase 12's engine; NOT committed at the time of this entry (Turon's commit instruction named Phase 12 only).
+
+### Source choice (every number measured live on the Week 4 Sunday slate, 2026-10-04)
+- **ESPN league-wide injuries feed** (`site.api.espn.com/apis/site/v2/sports/football/nfl/injuries`): one call, all 32 teams, 800 entries, 8.7 MB raw but **348 KB gzipped in 0.25 s**. It is the only free source seen with a TIME per entry (`date`) and the game-day words: `Out` + fantasyStatus `INACTIVE` (175 entries; Friday's outs are plain `OUT`, 9) = the posted inactive list; `Active` with "is active for Sunday's..." = a confirmation.
+- **Rejected:** ESPN `/summary?event=` (its `injuries` block is capped at 5 entries per team); nflverse (no per-row time, batch cadence, cannot serve game day); Sleeper `/players/nfl` (15 MB, once a day).
+- **Timing calibration (28 teams):** the first active/inactive entry per team appears **70-89 min before kickoff** (median 85; one outlier at 245) and new ones keep arriving until ~17-20 min before. The 4 night-game teams had none yet, as expected. Hence: window opens 120 min before kickoff, final check at 15 min.
+- **Ids:** `athlete.id` is absent on all 800 entries; the entry-level `id` is a news id (negative for unlisted players). The ESPN player id is only in the card link (`/nfl/player/_/id/<id>/`); 800/800 entries yield exactly one, **798 resolve through `player_ids(espn)`** (the 2 unresolved were not rostered). The loader refuses a payload where an entry yields 0 or 2 ids.
+- Team spellings (WSH/WAS, LAR/LA) meet through `team_aliases`; all 32 ESPN teams and all schedule teams map.
+
+### Built
+| Piece | Where |
+|---|---|
+| Loader | `espn.injuries` -> `core_espn_injuries` (current state, replaced whole; preseason refused; unknown status words stored as sent). `schema/031`, contract recorded live, registry, `weekly = true`. View `mart_injury_espn` |
+| Windows | `fdb/gameday.py`: kickoffs from `core_schedule` (Eastern -> UTC), `LEAD` 120 min, `FINAL_AT` 15 min |
+| Engine | `fdb/alerts.py`: ESPN as a third, separate source; game-day flag = entry time within 3 h before that player's kickoff; kinds `inactive` (unexpected: priority 5, "as expected": 3), `active` (a Questionable player confirmed: 4), `final` ("NOT CONFIRMED" 15 min out, once per player per game, ledger `app_alert_final`, retried if the push failed, says so when ESPN posted nothing for his team) |
+| Watch | `python -m fdb alerts --watch [--send]`: polls ESPN every 120 s inside windows, the slow feeds (NFL file, MFL) every 10th poll; sleeps between windows; exits when none opens within 14 h; lock file against a second watcher; pushes one warning after 3 failed ESPN polls in a window |
+| Ops | `ops/alerts_watch.bat` (daily start covers Thu/Sun/Mon) and `ops/alerts_midweek.bat` (hourly `--refresh --send`). **Neither is registered in Task Scheduler.** |
+| Tests | 28 new (55 in `tests/test_alerts.py`); suite 379 |
+
+### Rules kept from Phase 12
+First run is a silent baseline; `--send` refuses before one exists; a week roll announces only new designations; a failed push keeps the player's previous state; default is a dry run. New: ESPN part is carried forward when the feed is not loaded; old state without an ESPN part still compares.
+
+### Gate
+- All three injury loaders idempotent (`fdb check`); in the weekly job; 379 tests OK.
+- Live read-only check on the real DB: 402 rostered players tracked, 105 carrying a status; 4 windows open at 20:01Z (MIN/MIA, SF/DEN, LV/KC, SEA/LAC), next opens 22:20Z (Monday night); game-day states resolved as expected.
+- **`fdb rebuild` x2 -> identical `b0ec66104ed417746c52d574991eba1258e199cbf97941d7bafc77f90d991898`, 0 network calls** (supersedes `4eade9e3...`). Snapshot first: `database/pre_phase13_20261004.db`.
+- NOT done: no push has ever been sent (no `NTFY_TOPIC`), nothing is scheduled, the alert state is unseeded, and a full `--watch --send` has only been run under a fake clock in tests (never against a live window).
+
+### Known limits
+In-game ESPN updates after kickoff also produce `change` pushes (in-game injury news, useful but not "pre-game"). Nothing knows who is in the starting lineup yet, so a bench player's scratch pushes like a starter's. The final check covers only players still listed Questionable/Doubtful; an Out player is not re-announced. ESPN's active/inactive timing is calibrated on ONE slate; recheck on a Thursday and a Monday game.
+
+### Not built (Phase 14 candidates)
+Lineup awareness (MFL `core_mfl_upcoming_lineups`, Sleeper starters) so starters outrank bench; news/RSS; Task Scheduler registration (needs Turon's OK); Yahoo (OAuth) and CBS (Playwright) rosters; recalibrate the window on Thursday/Monday.
+
+**OPEN ITEMS (new):** (33) Turon: approve registering `alerts_watch.bat` (daily) and `alerts_midweek.bat` (hourly), after `NTFY_TOPIC` + `--seed`. (34) Recalibrate the 70-89 min inactive timing on a Thursday and a Monday game. (35) Decide whether post-kickoff ESPN changes should push or be muted.

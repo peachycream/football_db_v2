@@ -1,0 +1,11 @@
+# Recorded from a live response 2026-10-04 (800 entries, all 32 teams). These are the fields EVERY entry had; the details_* fields exist only on some entries (284 of 800) and are not required. A missing field fails the load.
+date
+espn_player_id
+longComment
+position
+season
+season_type
+shortComment
+status
+team
+timestamp

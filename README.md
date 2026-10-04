@@ -16,6 +16,7 @@ python -m fdb reconcile --season 2024             # cross-source agreement check
 python -m fdb rebuild                             # regenerate the DB from data/raw, offline
 python -m fdb weekly [--test-alert]               # the scheduled job
 python -m fdb alerts [--refresh] [--seed|--send]  # status changes for MY rostered players (Phase 12); dry run unless --send
+python -m fdb alerts --watch [--send]             # game-day: poll ESPN every 2 min from 2 h before each kickoff (Phase 13); inactives + 15-min final check
 python -m fdb alerts --test-push                  # ONE ntfy notification to your phone, nothing else
 python -m unittest discover -s tests -t .         # tests
 python -m app                                     # web app (Flask): http://127.0.0.1:5001/ownership/

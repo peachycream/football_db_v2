@@ -8,7 +8,9 @@ probed live 2026-10-04 (schema/030_core_injuries.sql has the field-level detail)
   * MFL TYPE=injuries answers {"injuries": {"timestamp", "week", "injury": [{id, status, details, exp_return}]}}
     with no login; the list is league-independent.
 """
+import gzip
 import json
+import re
 
 from .. import http, mfl, schedule
 from ..loader import Loader, Scope
@@ -121,4 +123,83 @@ class MflInjuriesLoader(Loader):
         return fails
 
 
-LOADERS = (NflInjuriesLoader, MflInjuriesLoader)
+ESPN_SEASON_TYPES = {2: "REG", 3: "POST"}   # ESPN's own codes; 1 = preseason is never loaded (rule 5)
+ESPN_CARD_ID = re.compile(r"/nfl/player/(?:stats/)?_/id/(\d+)/")
+
+
+class EspnInjuriesLoader(Loader):
+    """ESPN's league-wide injuries feed: the only free source with a time per entry and the game-day active/inactive
+    word. Facts, each measured 2026-10-04 (schema/031_core_espn_injuries.sql has the long version): one call returns
+    all 32 teams; gzip makes it 348 KB; the player id is ONLY in the player-card link; the per-game summary endpoint
+    is capped at 5 entries a team and is not used."""
+    id = "espn.injuries"
+    source = "espn"
+    endpoint = "injuries"
+    table = "core_espn_injuries"
+    grain = "snapshot"
+    ext = "json"
+    warn_new_fields = False   # the athlete block carries headshots, logos and links that are deliberately not stored
+    URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries"
+    ROWS = (200, 3000)        # observed 800
+
+    def partition(self, scope: Scope) -> str:
+        return "all"
+
+    def fetch(self, partition):
+        body = http.get(self.URL, headers={"Accept-Encoding": "gzip"})
+        if body[:2] == b"\x1f\x8b":   # stored decompressed: the raw file is the response as the framework parses it
+            body = gzip.decompress(body)
+        return body, {"url": self.URL}
+
+    def parse(self, payload):
+        d = json.loads(payload)
+        season = (d or {}).get("season") or {}
+        stype = ESPN_SEASON_TYPES.get(season.get("type"))
+        if stype is None:
+            raise ValueError(f"ESPN injuries feed is for season type {season.get('type')!r} ({season.get('displayName')}); "
+                             "only regular season and postseason are loaded")
+        rows = []
+        for group in d.get("injuries") or []:
+            for i in group.get("injuries") or []:
+                a = i.get("athlete") or {}
+                ids = {m for link in a.get("links") or [] for m in ESPN_CARD_ID.findall(link.get("href", ""))}
+                if len(ids) != 1:   # exact key or nothing: never a name
+                    raise ValueError(f"ESPN entry for {a.get('displayName')!r} yields {len(ids)} player ids in its card links: {sorted(ids)}")
+                det = i.get("details") or {}
+                rows.append({
+                    "season": season.get("year"), "season_type": stype, "timestamp": d.get("timestamp"),
+                    "espn_player_id": ids.pop(), "team": (a.get("team") or {}).get("abbreviation"),
+                    "position": (a.get("position") or {}).get("abbreviation"),
+                    "status": i.get("status"), "date": i.get("date"),
+                    "shortComment": i.get("shortComment"), "longComment": i.get("longComment"),
+                    "details_fantasyStatus": (det.get("fantasyStatus") or {}).get("description"),
+                    "details_type": det.get("type"), "details_location": det.get("location"),
+                    "details_detail": det.get("detail"), "details_side": det.get("side"),
+                    "details_returnDate": det.get("returnDate")})
+        return sorted({k for r in rows for k in r}), rows
+
+    def scope_rows(self, rows, scope):
+        return rows
+
+    def scope_where(self, scope):
+        return "1 = 1", ()
+
+    def raw_is_final(self, conn, partition):
+        return False
+
+    def checks(self, conn, scope):
+        n = conn.execute("SELECT COUNT(*) FROM core_espn_injuries").fetchone()[0]
+        lo, hi = self.ROWS
+        fails = [] if lo <= n <= hi else [f"{n} injury rows; expected {lo}-{hi} (truncated?)"]
+        # A team name the schedule cannot be joined through would silently drop a game's players from the final check.
+        unmapped = conn.execute("""SELECT DISTINCT team FROM core_espn_injuries e WHERE NOT EXISTS
+                (SELECT 1 FROM team_aliases a WHERE a.abbr = e.team AND e.season BETWEEN a.season_from AND a.season_to)""").fetchall()
+        if unmapped:
+            fails.append(f"team values with no team_aliases row: {[r[0] for r in unmapped]}")
+        bad = conn.execute("SELECT COUNT(*) FROM core_espn_injuries WHERE status IS NULL OR date IS NULL OR team IS NULL").fetchone()[0]
+        if bad:
+            fails.append(f"{bad} entries with no status, date or team")
+        return fails
+
+
+LOADERS = (NflInjuriesLoader, MflInjuriesLoader, EspnInjuriesLoader)

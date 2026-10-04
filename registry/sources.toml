@@ -548,3 +548,16 @@ kind = "app"
 name = "app_alert_log"
 owner = "alerts.engine"
 kind = "app"
+
+# Phase 13: ESPN's league-wide injuries feed (game-day inactives/actives, a time per entry) and the final-check ledger.
+[[table]]
+name = "core_espn_injuries"
+owner = "espn.injuries"
+source = "site.api.espn.com/apis/site/v2/sports/football/nfl/injuries (one call, gzip); current state, replaced whole"
+grain = "snapshot"
+weekly = true
+
+[[table]]
+name = "app_alert_final"
+owner = "alerts.engine"
+kind = "app"
