@@ -190,6 +190,22 @@ source = "MFL export TYPE=projectedScores&W=<week> (snapshots)"
 grain = "league_snapshot"
 weekly = true
 
+# Phase 11: the next unplayed week's pairings and lineups (card PREVIEW). One weeklyResults fetch (own raw
+# endpoint weeklyResultsUpcoming) feeds both tables.
+[[table]]
+name = "core_mfl_upcoming_games"
+owner = "mfl.upcoming_games"
+source = "MFL export TYPE=weeklyResults&W=<next unplayed week> (snapshots), pairings only"
+grain = "league_snapshot"
+weekly = true
+
+[[table]]
+name = "core_mfl_upcoming_lineups"
+owner = "mfl.upcoming_lineups"
+source = "MFL TYPE=weeklyResults franchise.player[] of the next unplayed week (reads mfl.upcoming_games' raw)"
+grain = "league_snapshot"
+weekly = true
+
 [[table]]
 name = "core_sleeper_league"
 owner = "sleeper.league"
@@ -486,3 +502,20 @@ grain = "week"
 seasons = "2018-"
 weekly = true
 note = "single-week offense/defense/total DVOA per team that played; defDvoa lower is better; mart_team_dvoa_week renames"
+
+# Phase 11: the Matchup of the Week card (fdb/matchup.py). Runs after every loader; reads core_mfl_* only.
+[[table]]
+name = "mart_matchup_card"
+owner = "matchup.build"
+kind = "builder"
+note = "one row per fantasy game: state PREVIEW/LIVE/FINAL, records and points-for through the prior weeks, series, projections from the last pre-kickoff snapshot"
+
+[[table]]
+name = "mart_matchup_card_groups"
+owner = "matchup.build"
+kind = "builder"
+
+[[table]]
+name = "mart_matchup_card_players"
+owner = "matchup.build"
+kind = "builder"

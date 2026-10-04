@@ -394,6 +394,81 @@ class Projections(unittest.TestCase):
         self.assertIn("mfl.projected_scores", registry.weekly_loaders())
 
 
+def unplayed_week(week):
+    """What MFL answers for a week not yet played: no score, result 'T' for everyone, lineups already set."""
+    def fr(fid, home):
+        f = side(fid, 0, "T", home, lineup=[(f"{fid}1", "starter", 0), (f"{fid}2", "nonstarter", 0)])
+        for k in ("score", "opt_pts"):
+            f.pop(k)
+        f["spread"] = "10.5"
+        f["player"] = [{"id": p["id"], "status": p["status"]} for p in f["player"]]
+        return f
+    return week_payload(week, [[fr("0001", "1"), fr("0002", "0")], [fr("0002", "1"), fr("0003", "0")],
+                               [fr("0003", "1"), fr("0004", "0")], [fr("0004", "1"), fr("0001", "0")]])
+
+
+class Upcoming(unittest.TestCase):
+    """Phase 11: the next unplayed week's pairings + lineups (card PREVIEW). NOW = 2026-09-26: week 3 is next."""
+
+    def test_parse_pairings_and_lineups(self):
+        _, games = get("mfl.upcoming_games").parse(json.dumps(unplayed_week(3)).encode())
+        self.assertEqual(len(games), 8)
+        self.assertEqual({(g["id"], g["opponent_id"], g["isHome"]) for g in games if g["id"] == "0001"},
+                         {("0001", "0002", "1"), ("0001", "0004", "0")})
+        fields, players = get("mfl.upcoming_lineups").parse(json.dumps(unplayed_week(3)).encode())
+        self.assertEqual(len(players), 8)
+        self.assertEqual(fields, ["id", "status"])
+
+    def test_fetches_only_the_next_unplayed_week_under_its_own_raw_endpoint(self):
+        with Env() as env:
+            env.seed({})
+            ld = get("mfl.upcoming_games")
+            self.assertEqual(fw.fetch_partitions(env.c, ld), ["2026/11111/REG03"])
+            self.assertEqual(ld.endpoint, "weeklyResultsUpcoming")           # not weekly_results' partitions
+            self.assertNotEqual(ld.endpoint, get("mfl.weekly_results").endpoint)
+
+    def test_load_keeps_each_snapshot_and_both_tables_agree(self):
+        with Env() as env:
+            env.seed({})
+            with mock.patch.dict(os.environ, {"FDB_NOW": "2026-09-26T17:00:00Z"}):
+                write_raw("mfl", "weeklyResultsUpcoming", "2026/11111/REG03", unplayed_week(3))
+            with mock.patch.dict(os.environ, {"FDB_NOW": "2026-09-27T09:00:00Z"}):
+                write_raw("mfl", "weeklyResultsUpcoming", "2026/11111/REG03", unplayed_week(3))
+            for lid in ("mfl.upcoming_games", "mfl.upcoming_lineups"):
+                res = env.load_all(lid)
+                self.assertEqual(len(res), 2, lid)
+                for r in res:
+                    self.assertEqual(r["failures"], [], (lid, r))
+            self.assertEqual(env.c.execute("SELECT COUNT(DISTINCT snapshot_at) FROM core_mfl_upcoming_games").fetchone()[0], 2)
+            self.assertEqual(env.c.execute("SELECT COUNT(*) FROM core_mfl_upcoming_games").fetchone()[0], 16)
+            self.assertEqual(env.c.execute("SELECT COUNT(*) FROM core_mfl_upcoming_lineups").fetchone()[0], 16)
+
+    def test_unknown_franchise_and_missing_mirror_fail(self):
+        pay = unplayed_week(3)
+        pay["weeklyResults"]["matchup"][0]["franchise"][1]["id"] = "9999"
+        with Env() as env:
+            env.seed({})
+            write_raw("mfl", "weeklyResultsUpcoming", "2026/11111/REG03", pay)
+            res = env.load_all("mfl.upcoming_games")[0]
+            self.assertFalse(res["applied"])
+            self.assertTrue(any("not in core_mfl_franchises" in f for f in res["failures"]), res["failures"])
+
+    def test_league_without_head_to_head_is_not_fetched(self):
+        lg = mfl_league()
+        lg["league"]["h2h"] = "ALL"
+        with Env() as env:
+            write_raw("mfl", "league", "2026/11111", lg)
+            for lid in ("mfl.league", "mfl.divisions", "mfl.conferences", "mfl.franchises"):
+                env.load_all(lid)
+            self.assertEqual(fw.fetch_partitions(env.c, get("mfl.upcoming_games")), [])
+            self.assertEqual(fw.fetch_partitions(env.c, get("mfl.projected_scores")), ["2026/11111/REG03"])   # projections still are
+
+    def test_registered_weekly_in_order(self):
+        from fdb import registry
+        order = registry.weekly_loaders()
+        self.assertLess(order.index("mfl.upcoming_games"), order.index("mfl.upcoming_lineups"))
+
+
 class Registry(unittest.TestCase):
     def test_both_tables_are_owned_and_weekly_in_order(self):
         from fdb import registry

@@ -1,0 +1,198 @@
+# Franchise colors for the Matchup of the Week card, keyed by franchise id PER LEAGUE (never by name at read time).
+# `color` is the franchise's accent on the card's dark background; `alt` is used for the second team when two primaries
+# are too close (Bengals / Broncos / Browns oranges; Ravens purple vs Vikings purple). v1's name lookup had colors too
+# dark for a dark card (Ravens #241773) and several near-duplicates; these are brightened. League 30590 only: its 32
+# franchises are named after NFL clubs. A franchise without an entry gets no color and the renderer falls back.
+# The trailing comment is the club abbreviation, for the human reading this file.
+
+[[color]]
+league_id = "30590"
+franchise_id = "0001"
+color = "#E03A4F"
+alt = "#9AA0A6"   # ATL
+
+[[color]]
+league_id = "30590"
+franchise_id = "0002"
+color = "#8A6FE8"
+alt = "#D7B84A"   # BAL
+
+[[color]]
+league_id = "30590"
+franchise_id = "0003"
+color = "#FB4F14"
+alt = "#E8E8E8"   # CIN
+
+[[color]]
+league_id = "30590"
+franchise_id = "0004"
+color = "#FF6A13"
+alt = "#B5784A"   # CLE
+
+[[color]]
+league_id = "30590"
+franchise_id = "0005"
+color = "#4B92DB"
+alt = "#E6455A"   # TEN
+
+[[color]]
+league_id = "30590"
+franchise_id = "0006"
+color = "#2FA37A"
+alt = "#E8E8E8"   # NYJ
+
+[[color]]
+league_id = "30590"
+franchise_id = "0007"
+color = "#3A7BFF"
+alt = "#E5484D"   # BUF
+
+[[color]]
+league_id = "30590"
+franchise_id = "0008"
+color = "#00C2CB"
+alt = "#FF7A3D"   # MIA
+
+[[color]]
+league_id = "30590"
+franchise_id = "0009"
+color = "#FF7A1A"
+alt = "#5B7FBF"   # DEN
+
+[[color]]
+league_id = "30590"
+franchise_id = "0010"
+color = "#E5333F"
+alt = "#FFC72C"   # KC
+
+[[color]]
+league_id = "30590"
+franchise_id = "0011"
+color = "#4F7FD6"
+alt = "#E5484D"   # NE
+
+[[color]]
+league_id = "30590"
+franchise_id = "0012"
+color = "#A5ACAF"
+alt = "#E8E8E8"   # LV
+
+[[color]]
+league_id = "30590"
+franchise_id = "0013"
+color = "#5AA7E6"
+alt = "#E8E8E8"   # IND
+
+[[color]]
+league_id = "30590"
+franchise_id = "0014"
+color = "#2AA8F0"
+alt = "#FFC20E"   # LAC
+
+[[color]]
+league_id = "30590"
+franchise_id = "0015"
+color = "#E5484D"
+alt = "#5B7FBF"   # HOU
+
+[[color]]
+league_id = "30590"
+franchise_id = "0016"
+color = "#00A3A3"
+alt = "#D7A22A"   # JAX
+
+[[color]]
+league_id = "30590"
+franchise_id = "0017"
+color = "#3FAE62"
+alt = "#FFB612"   # GB
+
+[[color]]
+league_id = "30590"
+franchise_id = "0018"
+color = "#8B5FD0"
+alt = "#FFC62F"   # MIN
+
+[[color]]
+league_id = "30590"
+franchise_id = "0019"
+color = "#E8582E"
+alt = "#4F7FD6"   # CHI
+
+[[color]]
+league_id = "30590"
+franchise_id = "0020"
+color = "#1C9BE6"
+alt = "#B0B7BC"   # DET
+
+[[color]]
+league_id = "30590"
+franchise_id = "0021"
+color = "#4F72E0"
+alt = "#E5484D"   # NYG
+
+[[color]]
+league_id = "30590"
+franchise_id = "0022"
+color = "#2AA38F"
+alt = "#C9CDD1"   # PHI
+
+[[color]]
+league_id = "30590"
+franchise_id = "0023"
+color = "#5B8BE0"
+alt = "#B0B7BC"   # DAL
+
+[[color]]
+league_id = "30590"
+franchise_id = "0024"
+color = "#C24A55"
+alt = "#FFB612"   # WAS
+
+[[color]]
+league_id = "30590"
+franchise_id = "0025"
+color = "#69BE28"
+alt = "#4F7FD6"   # SEA
+
+[[color]]
+league_id = "30590"
+franchise_id = "0026"
+color = "#D93A3A"
+alt = "#D4AF6A"   # SF
+
+[[color]]
+league_id = "30590"
+franchise_id = "0027"
+color = "#C93A5B"
+alt = "#E8E8E8"   # ARI
+
+[[color]]
+league_id = "30590"
+franchise_id = "0028"
+color = "#3F7BE8"
+alt = "#FFD100"   # STL
+
+[[color]]
+league_id = "30590"
+franchise_id = "0029"
+color = "#FFB612"
+alt = "#E8E8E8"   # PIT
+
+[[color]]
+league_id = "30590"
+franchise_id = "0030"
+color = "#D3BC8D"
+alt = "#E8E8E8"   # NO
+
+[[color]]
+league_id = "30590"
+franchise_id = "0031"
+color = "#0A9EE0"
+alt = "#B0B7BC"   # CAR
+
+[[color]]
+league_id = "30590"
+franchise_id = "0032"
+color = "#E5483A"
+alt = "#FF9A3D"   # TB

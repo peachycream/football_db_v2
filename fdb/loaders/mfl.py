@@ -595,5 +595,106 @@ class ProjectedScoresLoader(MflLoader):
         return fails
 
 
+# ------------------------------------------------- upcoming games + lineups ----
+class UpcomingGamesLoader(ProjectedScoresLoader):
+    """Snapshots of weeklyResults for the NEXT UNPLAYED regular-season week: who plays whom and who is in each
+    lineup before the games (the card's PREVIEW). Same weeks and the same 'a completed week is never fetched' rule
+    as the projections. Its own raw endpoint (`weeklyResultsUpcoming`), NOT mfl.weekly_results' partitions: that
+    loader keeps only 3 non-final files per partition and could prune the pre-kickoff snapshot. One fetch feeds
+    this table and core_mfl_upcoming_lineups."""
+    id = "mfl.upcoming_games"
+    table = "core_mfl_upcoming_games"
+    mfl_type = "weeklyResults"
+    endpoint = "weeklyResultsUpcoming"
+    CALL_SPACING = 3.0
+
+    def fetch(self, partition):
+        season, league = self._split(partition)
+        saved, api.interval[0] = api.interval[0], max(api.interval[0], self.CALL_SPACING)
+        try:
+            return api.export(season, league, self.mfl_type, W=self._week_of(partition))
+        finally:
+            api.interval[0] = saved
+
+    def snapshot_bases(self, conn, season, league, fetching):
+        if fetching:   # a league without head-to-head has no pairings (TWE 55757: h2h = ALL)
+            r = conn.execute("SELECT h2h FROM core_mfl_league WHERE season = ? AND league_id = ?", (season, league)).fetchone()
+            if r and r[0] != "YES":
+                return []
+        return super().snapshot_bases(conn, season, league, fetching)
+
+    def parse(self, payload):
+        week, games = WeeklyResultsLoader._games(payload)
+        if not games:
+            return self.expected_fields(), []
+        rows = []
+        for frs in games:
+            for f in frs:
+                other = [o["id"] for o in frs if o is not f]
+                rows.append({**{k: v for k, v in f.items() if k != "player"}, "week": week,
+                             "opponent_id": other[0] if other else ""})
+        return sorted({k for frs in games for f in frs for k in f}), rows
+
+    def scope_rows(self, rows, scope):
+        wrong = {r.get("week") for r in rows} - {str(scope.week)}
+        if wrong:
+            raise ValueError(f"{scope.label}: MFL returned week(s) {sorted(wrong)} for W={scope.week}")
+        return rows
+
+    warn_new_fields = False   # result/spread/score appear as the week is played; this table keeps only the pairing
+
+    def checks(self, conn, scope):
+        q = (scope.season, scope.league, scope.week, scope.snapshot)
+        rows = conn.execute("""SELECT id, opponent_id FROM core_mfl_upcoming_games
+                               WHERE season = ? AND league_id = ? AND week = ? AND snapshot_at = ?""", q).fetchall()
+        fails = []
+        pairs = {(r["id"], r["opponent_id"]) for r in rows}
+        miss = [p for p in pairs if p[1] != "" and (p[1], p[0]) not in pairs]
+        if miss:
+            fails.append(f"{scope.label}: {len(miss)} games without a mirror row, e.g. {miss[:2]}")
+        known = {r[0] for r in conn.execute("SELECT id FROM core_mfl_franchises WHERE season = ? AND league_id = ?", q[:2])}
+        stray = sorted({r["id"] for r in rows} - known) if known else []
+        if stray:
+            fails.append(f"{scope.label}: franchises not in core_mfl_franchises: {stray}")
+        if len(rows) < 2:
+            fails.append(f"{scope.label}: only {len(rows)} game rows")
+        return fails
+
+
+class UpcomingLineupsLoader(UpcomingGamesLoader):
+    """Reads mfl.upcoming_games' raw file: franchise.player[] (id, status) per franchise."""
+    id = "mfl.upcoming_lineups"
+    table = "core_mfl_upcoming_lineups"
+    fetches = False
+
+    def parse(self, payload):
+        week, games = WeeklyResultsLoader._games(payload)
+        if not games:
+            return self.expected_fields(), []
+        rows, seen = [], {}
+        for frs in games:
+            for f in frs:
+                ps = api.as_list(f.get("player"))
+                sig = sorted((p["id"], p.get("status")) for p in ps)
+                if f["id"] in seen:
+                    if seen[f["id"]] != sig:
+                        raise ValueError(f"franchise {f['id']} has different lineups in its games")
+                    continue
+                seen[f["id"]] = sig
+                listed = {x for x in (f.get("starters") or "").split(",") if x}
+                if listed != {p["id"] for p in ps if p.get("status") == "starter"}:
+                    raise ValueError(f"franchise {f['id']}: `starters` disagrees with the players marked starter")
+                rows += [{**p, "franchise_id": f["id"], "week": week} for p in ps]
+        return sorted({k for r in rows for k in r} - {"franchise_id", "week"}), rows
+
+    def checks(self, conn, scope):
+        q = (scope.season, scope.league, scope.week, scope.snapshot)
+        have = conn.execute("SELECT COUNT(DISTINCT id) FROM core_mfl_upcoming_games WHERE season = ? AND league_id = ? AND week = ? "
+                            "AND snapshot_at = ?", q).fetchone()[0]
+        got = conn.execute("SELECT COUNT(DISTINCT franchise_id) FROM core_mfl_upcoming_lineups WHERE season = ? AND league_id = ? "
+                           "AND week = ? AND snapshot_at = ?", q).fetchone()[0]
+        return [f"{scope.label}: {have} franchises in upcoming_games but {got} with a lineup"] if have and have != got else []
+
+
 LOADERS = (LeagueLoader, DivisionsLoader, ConferencesLoader, FranchisesLoader, RostersLoader,
-           RulesLoader, PlayerScoresLoader, PlayersLoader, WeeklyResultsLoader, LineupsLoader, ProjectedScoresLoader)
+           RulesLoader, PlayerScoresLoader, PlayersLoader, WeeklyResultsLoader, LineupsLoader, ProjectedScoresLoader, UpcomingGamesLoader, UpcomingLineupsLoader)
