@@ -94,6 +94,23 @@ def cmd_reconcile(a):
     return rc
 
 
+def cmd_card(a):
+    from . import card_render
+    conn = _conn()
+    try:
+        path, card = card_render.render_to_file(conn, a.league, a.season, a.week, a.home, a.away, a.out)
+    except card_render.RenderError as e:
+        print(f"card: {e}")
+        return 1
+    finally:
+        conn.close()
+    pk = card["pick"] or {}
+    print(f"{path}  ({card['away']['name']} at {card['home']['name']}, {card['league_name']} {card['season']} week {card['week']}, "
+          f"{card['state']}{', FEATURED' if card['featured'] else ''}; ranked on {pk.get('basis')})")
+    print("rendered only; nothing was posted")
+    return 0
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] == ["parity-ownership"]:  # its own parser: argparse REMAINDER drops leading --options
@@ -122,6 +139,14 @@ def main(argv=None):
     s = sub.add_parser("check", help="idempotency: reload the latest scope and compare hashes")
     s.add_argument("--loader", nargs="*")
     s.set_defaults(fn=cmd_check)
+    s = sub.add_parser("card", help="render the Matchup of the Week card to a PNG (data/cards/); posts nothing")
+    s.add_argument("--league")
+    s.add_argument("--season", type=int)
+    s.add_argument("--week", type=int)
+    s.add_argument("--home")
+    s.add_argument("--away")
+    s.add_argument("--out", help="write here instead of data/cards/")
+    s.set_defaults(fn=cmd_card)
     sub.add_parser("parity-ownership", help="Phase 3 gate: /ownership/ owners vs the v1 oracle (see fdb/parity.py)")
     sub.add_parser("rebuild", help="rebuild the DB from data/raw with the network disabled").set_defaults(fn=lambda a: rebuild.run())
     s = sub.add_parser("weekly", help="the scheduled job")

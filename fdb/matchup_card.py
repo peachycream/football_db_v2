@@ -30,6 +30,19 @@ def leagues(conn):
     return [{"league_id": i, "name": league_name(conn, i)} for i in ids]
 
 
+def resolve(conn, league=None, season=None, week=None):
+    """(league, season, week) with anything missing or unknown replaced by a default: league 30590 (else the first with
+    rows), its newest season, that season's newest week. (None, None, None) when there is no data."""
+    ids = [x["league_id"] for x in leagues(conn)]
+    if not ids:
+        return None, None, None
+    league = league if league in ids else ("30590" if "30590" in ids else ids[0])
+    ss = seasons(conn, league)
+    season = season if season in ss else ss[0]
+    ws = [w["week"] for w in weeks(conn, league, season)]
+    return league, season, (week if week in ws else ws[0])
+
+
 def seasons(conn, league):
     return [r[0] for r in conn.execute("SELECT DISTINCT season FROM mart_matchup_card WHERE league_id = ? ORDER BY season DESC", (league,))]
 
@@ -291,8 +304,12 @@ def _initials(name):
     return (parts[0][0] + (parts[1][0] if len(parts) > 1 else "")).upper() if parts else "?"
 
 
+_DATA_LOGO = re.compile(r"^data:image/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$")
+
+
 def _logo(url):
-    return url if url and re.match(r"^https?://", url) else None
+    """A logo is used only if it is an http(s) URL or an embedded PNG/JPEG/GIF/WEBP data URI (the PNG renderer's form)."""
+    return url if url and (re.match(r"^https?://", url) or _DATA_LOGO.match(url)) else None
 
 
 def card_html(c) -> str:

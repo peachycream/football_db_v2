@@ -18,3 +18,6 @@ __pycache__/
 PIPELINE_STATUS.json
 # Ops logs (ops/*.bat)
 data/logs/
+# Rendered cards and downloaded franchise logos (rebuildable)
+data/cards/
+data/cache/

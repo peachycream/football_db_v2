@@ -5,9 +5,9 @@ import html
 import sqlite3
 from urllib.parse import urlencode
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request
 
-from fdb import config, matchup_card as mc
+from fdb import card_render, config, matchup_card as mc
 
 from .shell import page_shell
 
@@ -37,17 +37,8 @@ def _url(**kw):
 
 
 def _resolve(conn):
-    """(league, season, week) from the query, falling back to: league 30590 or the first with rows, its newest season,
-    its newest week."""
     lgs = mc.leagues(conn)
-    if not lgs:
-        return None, None, None, lgs
-    ids = [x["league_id"] for x in lgs]
-    league = request.args.get("league") if request.args.get("league") in ids else ("30590" if "30590" in ids else ids[0])
-    ss = mc.seasons(conn, league)
-    season = _int("season") if _int("season") in ss else ss[0]
-    ws = [w["week"] for w in mc.weeks(conn, league, season)]
-    week = _int("week") if _int("week") in ws else ws[0]
+    league, season, week = mc.resolve(conn, request.args.get("league"), _int("season"), _int("week"))
     return league, season, week, lgs
 
 
@@ -120,7 +111,8 @@ def page():
             main = (f'<div class="mx-main">{mc.card_html(c)}'
                     f'<div class="mx-notes"><div>{_e(facts)} <a href="/api/matchup/card?'
                     f'{_e(urlencode({"league": league, "season": season, "week": week, "home": pick["home_id"], "away": pick["away_id"]}))}">card data (JSON)</a> &middot; <a href="/matchup/card/?'
-                    f'{_e(urlencode({"league": league, "season": season, "week": week, "home": pick["home_id"], "away": pick["away_id"]}))}">card only</a></div>'
+                    f'{_e(urlencode({"league": league, "season": season, "week": week, "home": pick["home_id"], "away": pick["away_id"]}))}">card only</a> &middot; <a href="/matchup/card.png?'
+                    f'{_e(urlencode({"league": league, "season": season, "week": week, "home": pick["home_id"], "away": pick["away_id"]}))}">PNG (the image that would be posted)</a></div>'
                     f'{"<ul>" + notes + "</ul>" if notes else ""}</div></div>')
         return page_shell("Matchup card", PAGE_CSS + banner + f'<div class="mx-wrap">{left}{main}</div>', active=PATH)
     finally:
@@ -141,6 +133,25 @@ def card_only():
                 f'<body style="margin:0;padding:16px;background:#05070d">{mc.card_html(c)}</body></html>')
     finally:
         conn.close()
+
+
+@bp.route("/matchup/card.png")
+def card_png():
+    """The card as the PNG a Discord post would carry. Rendered on request (a few seconds: Chromium starts cold) and never
+    cached, so it always matches the data. Posts nothing."""
+    conn = _db()
+    try:
+        league, season, week, _ = _resolve(conn)
+        c = mc.card(conn, league, season, week, request.args.get("home"), request.args.get("away")) if league else None
+    finally:
+        conn.close()
+    if c is None:
+        return "No such game.", 404
+    try:
+        png = card_render.render_png(c)
+    except card_render.RenderError as e:
+        return f"Could not render the card: {e}", 503
+    return Response(png, mimetype="image/png", headers={"Cache-Control": "no-store"})
 
 
 @bp.route("/api/matchup/games")
