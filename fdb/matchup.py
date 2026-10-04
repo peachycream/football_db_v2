@@ -59,12 +59,18 @@ class Data:
         for r in q("SELECT season, league_id, week, snapshot_at, id, opponent_id, isHome FROM core_mfl_upcoming_games"):
             if self.up_snap.get((r["season"], r["league_id"], r["week"])) == r["snapshot_at"]:
                 self.up_games[(r["season"], r["league_id"], r["week"])].append(r)
+        self.up_roster = defaultdict(lambda: defaultdict(list))           # (s, l, w) -> franchise -> [(id, None)], every status
         for r in q("SELECT season, league_id, week, snapshot_at, franchise_id, id, status FROM core_mfl_upcoming_lineups"):
             if self.up_snap.get((r["season"], r["league_id"], r["week"])) == r["snapshot_at"]:
                 self.up_lineups[(r["season"], r["league_id"], r["week"])].append(r)
-        self.lineups = defaultdict(list)
-        for r in q("SELECT season, league_id, week, franchise_id, id, score FROM core_mfl_lineups WHERE status = 'starter'"):
-            self.lineups[(r["season"], r["league_id"], r["week"])].append(r)
+                self.up_roster[(r["season"], r["league_id"], r["week"])][r["franchise_id"]].append((r["id"], None))
+        self.lineups = defaultdict(list)                                  # starters
+        self.roster = defaultdict(lambda: defaultdict(list))              # (s, l, w) -> franchise -> [(id, actual)], every status
+        for r in q("SELECT season, league_id, week, franchise_id, id, score, status FROM core_mfl_lineups"):
+            k = (r["season"], r["league_id"], r["week"])
+            self.roster[k][r["franchise_id"]].append((r["id"], r["score"]))
+            if r["status"] == "starter":
+                self.lineups[k].append(r)
         self.player = {r["source_id"]: r for r in q(
             """SELECT i.source_id, i.gsis_id, p.display_name, p.position FROM player_ids i
                JOIN players p ON p.gsis_id = i.gsis_id WHERE i.source = 'mfl'""")}
@@ -272,6 +278,14 @@ def build(conn) -> dict:
         opt = {k: (v["opt_pts"] if (v is not None and state == "FINAL") else None) for k, v in rv.items()}
         pj = {who: proj_total.get((season, league, week, sides[who]["id"]), (None, 0)) for who in ("home", "away")}
         snap = proj_used.get((season, league, week))
+        roster = d.roster if source == "weekly_results" else d.up_roster
+        pm_ = snap[1] if snap else None
+        strength, roster_actual = {}, {}
+        for who in ("home", "away"):
+            ids = roster.get((season, league, week), {}).get(sides[who]["id"], [])
+            strength[who] = round(sum(pm_.get(i, 0.0) or 0.0 for i, _ in ids), 2) if (pm_ is not None and ids) else None
+            roster_actual[who] = round(sum(a or 0.0 for _, a in ids), 2) if (state == "FINAL" and ids) else None
+        is_playoff = int(week > (d.last_reg.get((season, league)) or 0))
         w_h, w_a, t_, last = series(league, home, away, season, week)
         rival = int(bool(sides["home"]["div_id"]) and sides["home"]["div_id"] == sides["away"]["div_id"])
         H, A = sides["home"], sides["away"]
@@ -285,7 +299,8 @@ def build(conn) -> dict:
                      pj["home"][0] if snap else None, pj["away"][0] if snap else None,
                      pj["home"][1] if snap else None, pj["away"][1] if snap else None,
                      w_h + w_a + t_, w_h, w_a, t_, last[0] if last else None, last[1] if last else None,
-                     last[2] if last else None, last[3] if last else None))
+                     last[2] if last else None, last[3] if last else None,
+                     is_playoff, strength["home"], strength["away"], roster_actual["home"], roster_actual["away"]))
         # invariants checked per game
         for who in ("home", "away"):
             s_ = sides[who]

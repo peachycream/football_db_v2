@@ -55,7 +55,7 @@ PAGE_CSS = """
 <style>
 .mx-wrap{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start}
 .mx-side{width:320px;max-width:100%}
-.mx-main{flex:1;min-width:320px}
+.mx-main{flex:1 1 420px;min-width:0;max-width:100%;overflow-x:auto}
 .mx-h{font-size:.7rem;letter-spacing:.08em;color:var(--tx-mut);margin:14px 0 6px;font-weight:700}
 .mx-chips a{display:inline-block;padding:3px 9px;margin:0 4px 4px 0;border:1px solid var(--edge);border-radius:99px;color:var(--tx);text-decoration:none;font-size:.78rem}
 .mx-chips a.on{border-color:var(--accent);color:var(--accent);font-weight:700}
@@ -81,9 +81,12 @@ def page():
         gs = mc.games(conn, league, season, week)
         home, away = request.args.get("home"), request.args.get("away")
         pick = next((g for g in gs if g["home_id"] == home and g["away_id"] == away), gs[0] if gs else None)
+        p = mc.matchup_pick.pick(conn, league, season, week)
+        basis = mc.matchup_pick.BASIS_TEXT.get(p["basis"], "")
         banner = ('<div class="mx-banner"><b>Review only.</b> This page never sends anything. It shows what the card would '
-                  "contain for each game; the Discord post is a separate step that is not built yet. The featured-game "
-                  "picker is not ported yet, so games are listed strongest first (by the weaker team's record) and any can be opened.</div>")
+                  "contain for each game; the Discord post is a separate step that is not built yet. "
+                  f"Games are ranked by the featured-game picker (a port of v1's selector), using {_e(basis)}. "
+                  "The top game is the one that would be featured.</div>")
         lg_chips = "".join(f'<a class="{"on" if x["league_id"] == league else ""}" href="{_e(_url(league=x["league_id"]))}">{_e(x["name"])}</a>'
                            for x in lgs)
         s_chips = "".join(f'<a class="{"on" if s == season else ""}" href="{_e(_url(league=league, season=s))}">{s}</a>'
@@ -98,7 +101,7 @@ def page():
             score = (f' &middot; {g["away_score"]:,.2f} to {g["home_score"]:,.2f}'
                      if g["state"] == "FINAL" and g["home_score"] is not None else "")
             rows += (f'<a class="mx-game {"on" if on else ""}" href="{_e(_url(league=league, season=season, week=week, home=g["home_id"], away=g["away_id"]))}">'
-                     f'<span class="st">{_e(g["state"])}{" &middot; RIVALRY" if g["rivalry"] else ""}</span>'
+                     f'<span class="st">{"&#9733; FEATURED &middot; " if g["featured"] else ""}{_e(g["state"])}{" &middot; RIVALRY" if g["rivalry"] else ""}</span>'
                      f'<b>{_e(g["away_name"])}</b> at <b>{_e(g["home_name"])}</b>'
                      f'<small>{_e(g["away_record"])} / {_e(g["home_record"])} before the week{score}</small></a>')
         left = (f'<div class="mx-side"><div class="mx-h">LEAGUE</div><div class="mx-chips">{lg_chips}</div>'
@@ -110,6 +113,8 @@ def page():
         else:
             c = mc.card(conn, league, season, week, pick["home_id"], pick["away_id"])
             notes = "".join(f"<li>{_e(n)}</li>" for n in c["notes"])
+            if c["pick"]:
+                notes += "".join(f"<li>{_e(n)}</li>" for n in c["pick"]["why"])
             facts = (f"State {c['state']}; lineups from {c['lineup_source'].replace('_', ' ')}; "
                      f"projection snapshot {c['proj_snapshot_at'] or 'none before kickoff'}.")
             main = (f'<div class="mx-main">{mc.card_html(c)}'

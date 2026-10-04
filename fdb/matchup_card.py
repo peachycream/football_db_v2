@@ -9,6 +9,8 @@ import html
 import math
 import re
 
+from . import matchup_pick
+
 GROUPS = ("QB", "RB", "WR", "TE", "DL", "LB", "DB")   # PK and OTHER are not on the position board (v1 parity)
 FALLBACK = ("#5AA7E6", "#FB4F14")
 BG = "#0D1220"
@@ -53,21 +55,22 @@ def _winpct(w, l, t):
 
 
 def games(conn, league, season, week):
-    """The week's games, strongest first: ordered by the weaker team's win percentage, then by combined points for.
-    This is NOT v1's selector (not ported yet); it only puts the games most likely to matter at the top."""
-    rows = conn.execute("""SELECT * FROM mart_matchup_card WHERE league_id = ? AND season = ? AND week = ?""",
+    """The week's games, best first by the featured-game picker (fdb/matchup_pick.py: v1's selector); rank 1 is the
+    featured game. Each row says which one it is and carries its pick score."""
+    p = matchup_pick.pick(conn, league, season, week)
+    rank = {(g["home_id"], g["away_id"]): g for g in p["ranked"]}
+    rows = conn.execute("SELECT * FROM mart_matchup_card WHERE league_id = ? AND season = ? AND week = ?",
                         (league, season, week)).fetchall()
     out = []
     for r in rows:
-        floor = min(_winpct(r["home_w"], r["home_l"], r["home_t"]), _winpct(r["away_w"], r["away_l"], r["away_t"]))
+        k = rank.get((r["home_id"], r["away_id"]))
         out.append({"home_id": r["home_id"], "away_id": r["away_id"], "home_name": r["home_name"], "away_name": r["away_name"],
                     "home_abbrev": r["home_abbrev"], "away_abbrev": r["away_abbrev"], "state": r["state"],
                     "home_record": rec(r["home_w"], r["home_l"], r["home_t"]), "away_record": rec(r["away_w"], r["away_l"], r["away_t"]),
                     "home_score": r["home_score"], "away_score": r["away_score"], "rivalry": bool(r["is_division_rivalry"]),
-                    "_k": (-floor, -(r["home_pf"] + r["away_pf"]), r["home_id"], r["away_id"])})
-    out.sort(key=lambda g: g["_k"])
-    for g in out:
-        del g["_k"]
+                    "rank": k["rank"] if k else None, "featured": bool(k and k["rank"] == 1),
+                    "pick_score": k["score"] if k else None, "pick_basis": p["basis"]})
+    out.sort(key=lambda g: (g["rank"] is None, g["rank"] or 0, g["home_id"], g["away_id"]))
     return out
 
 
@@ -191,6 +194,26 @@ def card(conn, league, season, week, home, away):
            "players": players, "players_basis": players_basis, "proj_snapshot_at": r["proj_snapshot_at"],
            "lineup_source": r["lineup_source"], "notes": notes}
     out["takeaways"] = takeaways(out)
+    p = matchup_pick.pick(conn, league, season, week)
+    me = next((g for g in p["ranked"] if g["home_id"] == home and g["away_id"] == away), None)
+    out["featured"] = bool(me and me["rank"] == 1)
+    out["pick"] = None if me is None else {
+        "rank": me["rank"], "of": len(p["ranked"]), "score": me["score"], "basis": p["basis"], "pedigree": p["pedigree"],
+        "quality_home": me["quality_home"], "quality_away": me["quality_away"], "closeness": me["closeness"], "size": me["size"],
+        "why": why(me, out, p)}
+    return out
+
+
+def why(me, c, p):
+    """Plain-language reasons for the pick, from the same numbers the scorer used."""
+    H, A = c["home"]["name"], c["away"]["name"]
+    out = [f"Ranked {me['rank']} of {len(p['ranked'])} games using {matchup_pick.BASIS_TEXT[p['basis']]}.",
+           f"Team quality (record blended with last season and roster strength): {H} {me['quality_home']:.2f}, {A} {me['quality_away']:.2f}."]
+    if me["closeness"] is not None:
+        out.append(f"Closeness of the two starter totals {me['closeness']:.2f}; size of the combined total {me['size']:.2f} "
+                   f"(0 = smallest game of the week, 1 = biggest).")
+    if not p["pedigree"]:
+        out.append("No last-season results for this league, so quality uses this season's record and roster strength only.")
     return out
 
 
@@ -278,6 +301,8 @@ def card_html(c) -> str:
     lt, rt = tint(AW["color"], 0.30), tint(HM["color"], 0.30)
     lt_txt, rt_txt = lighten(AW["color"]), lighten(HM["color"])
     pills = ""
+    if c.get("featured"):
+        pills += '<span class="pill" style="background:#3a2f12;color:#ffd36b">Matchup of the week</span>'
     if c["rivalry"]:
         pills += '<span class="pill" style="background:#3a1d24;color:#ff9aa8">Division rivalry</span>'
     pill = {"FINAL": ("#12301f", "#7be0a4", "Final"), "LIVE": ("#33280f", "#ffd36b", "In progress"),

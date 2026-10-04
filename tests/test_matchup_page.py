@@ -86,16 +86,14 @@ class CardData(unittest.TestCase):
             env.build()
             self.assertIsNone(mc.card(env.c, L, 2026, 1, "0001", "0003"))
 
-    def test_games_list_orders_by_the_weaker_teams_record(self):
+    def test_games_list_is_in_picker_order_with_one_featured(self):
         with MartEnv() as env:
             env.seed_all()
             env.build()
             gs = mc.games(env.c, L, 2026, 2)
             self.assertEqual(len(gs), 4)
-            # before week 2: 0001 2-0, 0002 1-1, 0003 1-1, 0004 0-2. Weaker-team record: 0001 v 0002 .500, 0002 v 0003 .500,
-            # 0003 v 0004 0, 0004 v 0001 0. The .500 tie goes to the larger combined points for (190 v 170).
-            self.assertEqual([{g["home_id"], g["away_id"]} for g in gs[:2]], [{"0001", "0002"}, {"0002", "0003"}])
-            self.assertEqual({g["home_id"] for g in gs[2:]} | {g["away_id"] for g in gs[2:]}, {"0003", "0004", "0001"})
+            self.assertEqual([g["rank"] for g in gs], [1, 2, 3, 4])
+            self.assertEqual([g["featured"] for g in gs], [True, False, False, False])
             self.assertEqual(mc.rec(2, 1, 1), "2-1-1")
 
     def test_week_state_is_final_only_when_every_game_is(self):
