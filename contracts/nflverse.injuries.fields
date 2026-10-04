@@ -1,0 +1,17 @@
+# Recorded from the live file 2026-10-04 (injuries_2025.csv and injuries_2026.csv share this header). A missing field fails the load.
+season
+season_type
+game_type
+team
+week
+gsis_id
+position
+full_name
+first_name
+last_name
+report_primary_injury
+report_secondary_injury
+report_status
+practice_primary_injury
+practice_secondary_injury
+practice_status

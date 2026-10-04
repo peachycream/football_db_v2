@@ -111,6 +111,17 @@ def cmd_card(a):
     return 0
 
 
+def cmd_alerts(a):
+    from . import alerts
+    if a.test_push:
+        return alerts.test_push()
+    conn = _conn()
+    try:
+        return alerts.run(conn, do_refresh=a.refresh, send=a.send, seed=a.seed)
+    finally:
+        conn.close()
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] == ["parity-ownership"]:  # its own parser: argparse REMAINDER drops leading --options
@@ -149,6 +160,13 @@ def main(argv=None):
                    "loaded, preview = the next week that has not kicked off (each with its featured game); refuses if not ready")
     s.add_argument("--out", help="write here instead of data/cards/")
     s.set_defaults(fn=cmd_card)
+    s = sub.add_parser("alerts", help="status changes for MY rostered players (Phase 12). Dry run by default: no network, "
+                       "no writes, nothing sent")
+    s.add_argument("--refresh", action="store_true", help="re-fetch the NFL and MFL injury feeds first (network reads)")
+    s.add_argument("--seed", action="store_true", help="record the current statuses as the baseline; sends nothing")
+    s.add_argument("--send", action="store_true", help="push the changes to ntfy (needs NTFY_TOPIC in .env) and record them")
+    s.add_argument("--test-push", action="store_true", help="send ONE test notification and nothing else")
+    s.set_defaults(fn=cmd_alerts)
     sub.add_parser("parity-ownership", help="Phase 3 gate: /ownership/ owners vs the v1 oracle (see fdb/parity.py)")
     sub.add_parser("rebuild", help="rebuild the DB from data/raw with the network disabled").set_defaults(fn=lambda a: rebuild.run())
     s = sub.add_parser("weekly", help="the scheduled job")

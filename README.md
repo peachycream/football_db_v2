@@ -15,13 +15,15 @@ python -m fdb identity --apply                    # rebuild players / player_ids
 python -m fdb reconcile --season 2024             # cross-source agreement checks
 python -m fdb rebuild                             # regenerate the DB from data/raw, offline
 python -m fdb weekly [--test-alert]               # the scheduled job
+python -m fdb alerts [--refresh] [--seed|--send]  # status changes for MY rostered players (Phase 12); dry run unless --send
+python -m fdb alerts --test-push                  # ONE ntfy notification to your phone, nothing else
 python -m unittest discover -s tests -t .         # tests
 python -m app                                     # web app (Flask): http://127.0.0.1:5001/ownership/
                                                   #   /viz/player  /viz/offense  /viz/defense  /matchups/  (v1's React pages)
 python -m fdb parity-ownership --v1 <v1 db> --explain   # Phase 3 gate vs the v1 oracle
 ```
 Fantasy leagues in scope and "which franchise is mine": [`config/my_franchises.toml`](config/my_franchises.toml).
-MFL credentials (`MFL_USERNAME`, `MFL_PASSWORD`), `PFF_API_KEY`, `FTN_API_KEY` and the DD Fantasy Football Trinity login (`DDFF_EMAIL`, `DDFF_PASSWORD`, `DDFF_SUPABASE_URL`, `DDFF_SUPABASE_KEY`) live in `.env` (gitignored).
+MFL credentials (`MFL_USERNAME`, `MFL_PASSWORD`), `PFF_API_KEY`, `FTN_API_KEY` and the DD Fantasy Football Trinity login (`DDFF_EMAIL`, `DDFF_PASSWORD`, `DDFF_SUPABASE_URL`, `DDFF_SUPABASE_KEY`) live in `.env` (gitignored). Phone push (`fdb alerts --send`) needs `NTFY_TOPIC` there (a long random name: on the public ntfy.sh server the topic is the only secret); `NTFY_SERVER` and `NTFY_TOKEN` are optional.
 Loaders are stdlib only (Python 3.11+): every nflverse asset is CSV/CSV.gz, so no pyarrow. The app needs Flask. On Windows use the 3.13 interpreter by full path (see `CLAUDE.md`).
 
 ## Operations (since Phase 8, 2026-09-29)

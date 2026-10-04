@@ -519,3 +519,32 @@ kind = "builder"
 name = "mart_matchup_card_players"
 owner = "matchup.build"
 kind = "builder"
+
+# Phase 12 (player status alerts): the two injury feeds (fdb/loaders/injuries.py) and the engine's own state
+# (fdb/alerts.py). Both feeds are current-state and re-fetched each run; the weekly job refreshes them too, but
+# `fdb alerts --refresh` is what keeps them fresh during the week. The alert tables are app state: what was already
+# pushed cannot be rebuilt from raw, so they are exported to app_state/ and re-imported by `fdb rebuild`.
+[[table]]
+name = "core_nflverse_injuries"
+owner = "nflverse.injuries"
+source = "nflverse release injuries/injuries_<season>.csv (2025+ header only)"
+grain = "player-week"
+seasons = "2025-"
+weekly = true
+
+[[table]]
+name = "core_mfl_injuries"
+owner = "mfl.injuries"
+source = "MFL export TYPE=injuries (league-independent, no login); current state, replaced whole"
+grain = "snapshot"
+weekly = true
+
+[[table]]
+name = "app_alert_state"
+owner = "alerts.engine"
+kind = "app"
+
+[[table]]
+name = "app_alert_log"
+owner = "alerts.engine"
+kind = "app"

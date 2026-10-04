@@ -1,0 +1,7 @@
+# Recorded from a live response 2026-10-04 (TYPE=injuries&JSON=1, 447 rows). week and timestamp are the response's top-level fields, copied onto each row. A missing field fails the load.
+details
+exp_return
+id
+status
+timestamp
+week

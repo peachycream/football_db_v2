@@ -647,3 +647,37 @@ Actuals need no new loader: `core_mfl_weekly_results` (score, result, `opt_pts` 
 **Not built (next):** the Discord post itself (a webhook; `OPS_DISCORD_WEBHOOK` unset; per-run explicit approval; nothing has ever been posted) and its idempotency log (one post per league, week and mode).
 
 **OPEN ITEMS (new):** (21) Phase 11 remainder, above. (29) Picker parity with v1 is unproven (above); revisit when a week has a real pre-kickoff snapshot (week 5) and compare against what Turon would have chosen. (27) The page's win probability is v1's uncalibrated logistic; calibrate it against results before it is shown as a probability. (28) `fdb rebuild` now takes ~12 min (the two of this session ran 21:48 to ~22:25). (26) The weekly job fetches projections once a week (Wednesday), which is the only pre-kickoff snapshot before Thursday's game; a Thursday-morning preview would use it. Add a daily/Thursday fetch if fresher injury news is wanted (`ops\daily_rosters.bat` is the model). (22) v1 Scouting tasks keep posting the broken card until replaced. (23) Turon: should the card's "points for" be the once-per-week total (2,681) or MFL's per-game figure? (24) The weekly job now fetches `weeklyResults` for 5 MFL leagues (not only 30590); empty playoff weeks are re-fetched each run (never final). Say if only 30590 is wanted. (25) Franchise id -> owner stability across 2020-2025 is assumed from MFL ids (names match for 0003/0029); not audited for all 32.
+
+## Phase 12 - Player status alerts, part A: injury feeds + change detection + ntfy (2026-10-04)
+
+Turon asked for push alerts on every rostered player (dynasty and redraft, MFL/Sleeper now; Yahoo and CBS later) through the week, up to 15 min before kickoff. Decided with Turon: runs on this PC (Task Scheduler), push through ntfy.sh, one alert per player listing every league, sources = Sleeper + official NFL report + news feeds (no X). Numbered 12 because Phases 0-11 already exist; this is part A of the alerts work.
+
+### Built
+| Piece | Where |
+|---|---|
+| Loaders | `nflverse.injuries` -> `core_nflverse_injuries` (the NFL's weekly report, 2025+ only: 2016-2024 files have another header), `mfl.injuries` -> `core_mfl_injuries` (current list, replaced whole, season recorded in the raw sidecar). `schema/030`, contracts recorded from live responses, registry rows, both `weekly = true`. Views `mart_injury_nfl`, `mart_injury_mfl` (kept separate on purpose: different claims) |
+| Engine | `fdb/alerts.py`: reads `mart_roster_ownership` (is_mine) x the two views on `gsis_id`; state in `app_alert_state`, history in `app_alert_log` (app tables, exported by rebuild) |
+| Push | `fdb/notify.py` (ntfy; `NTFY_TOPIC` in .env, optional `NTFY_SERVER`/`NTFY_TOKEN`; unset = loud, non-https refused, topic never printed) |
+| CLI | `python -m fdb alerts [--refresh] [--seed] [--send]`, `--test-push`. Default is a dry run: no network, no writes, nothing sent |
+| Tests | 27 new (`tests/test_alerts.py`); suite 351 |
+
+### Live findings (each measured 2026-10-04)
+- The nflverse 2026 file held weeks 1-4 only; a report week with no rows means NOT PUBLISHED, so the NFL part of the state is carried forward and nothing is announced (else every player looks cleared each Tuesday).
+- The file has **no per-row timestamp** (2025+): it says what a status is, never when it changed. Its Last-Modified moved during the day but its cadence is unmeasured.
+- Playoff weeks have 20-44 rows (check bound is REG-only); a traded player can appear twice in a week (`team` is in the key).
+- MFL injuries: 447 rows, statuses IR, Out, Questionable, IR-R, IR-PUP, RETIRED, Suspended, IR-NFI, Holdout (no Doubtful); some entries are stale (a Questionable with a July return date), so only CHANGES are announced. 12 of 447 have no `gsis_id`.
+- Today: 402 of Turon's 448 rostered NFL players resolve to a `gsis_id` and are tracked; 92 carry a status. The rest are devy/college ids.
+- MFL rosters carry no starter flag (slot `roster`); Sleeper does (`starter`/`bench`).
+
+### Rules the engine enforces
+First run is a silent baseline (`--seed`), and `--send` refuses before one exists; a week roll announces only NEW designations, never last week's as cleared; a failed push keeps that player's previous state so the next run retries; FP practice for a never-designated player is not news.
+
+### Gate
+- Both loaders idempotent (`fdb check`); in the weekly job; 351 tests OK.
+- **`fdb rebuild` x2 -> identical `4eade9e3849062e8757b86d8d4777f953ba1c7c3289acf0127d95a75434267c4`, 0 network calls** (supersedes `d4bc3c09...`). Snapshot first: `database/pre_phase12_20261004.db`.
+- NOT done: no push has ever been sent (no `NTFY_TOPIC` yet), nothing is scheduled, and the live alert state is unseeded.
+
+### Not built (Phase 13 candidates)
+Inactive list (~90 min pre-kickoff) and kickoff-relative fast polling (the nflverse file is too slow for game-day); news/RSS feeds; lineup awareness (MFL `core_mfl_upcoming_lineups`, Sleeper starters) so starters outrank bench; Task Scheduler entry (model: `ops\daily_rosters.bat`); Yahoo (OAuth) and CBS (Playwright login) rosters, which need league ids from Turon.
+
+**OPEN ITEMS (new):** (30) Turon: set `NTFY_TOPIC`, run `fdb alerts --test-push`, then `--seed`. (31) Measure how often nflverse updates the injuries file before relying on it. (32) Yahoo/CBS league names and ids.
