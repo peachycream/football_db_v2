@@ -13,7 +13,7 @@ import re
 import time
 from pathlib import Path
 
-from . import config, http, matchup_card as mc
+from . import config, http, matchup_card as mc, matchup_weeks
 
 CARDS_DIR = config.ROOT / "data" / "cards"
 LOGO_DIR = config.ROOT / "data" / "cache" / "logos"
@@ -112,8 +112,19 @@ def filename(card: dict) -> str:
     return f"{card['league_id']}_{card['season']}_wk{card['week']:02d}_{card['state'].lower()}_{a}_at_{h}.png"
 
 
-def render_to_file(conn, league=None, season=None, week=None, home=None, away=None, out=None):
-    """-> (path, card dict). Defaults to the newest week of the league and its FEATURED game (the picker's top game)."""
+def render_to_file(conn, league=None, season=None, week=None, home=None, away=None, out=None, mode=None):
+    """-> (path, card dict). Defaults to the newest week of the league and its FEATURED game (the picker's top game).
+    mode='recap' or 'preview' is what a job asks for: the week comes from fdb/matchup_weeks.py (the latest week with results
+    loaded, or the next week that has not kicked off) and its featured game; if that target is not ready this raises
+    RenderError with the reason instead of rendering the wrong week."""
+    if mode:
+        if week or home or away:
+            raise RenderError("--mode picks the week and the game itself; do not combine it with --week/--home/--away")
+        target = (matchup_weeks.recap_target if mode == "recap" else matchup_weeks.preview_target)(conn, league, season)
+        if not target["ready"]:
+            raise RenderError(f"{mode}: {target['reason']}")
+        league, season, week = target["league"], target["season"], target["week"]
+        home, away = target["featured"]["home_id"], target["featured"]["away_id"]
     league, season, week = mc.resolve(conn, league, season, week)
     if league is None:
         raise RenderError("no matchup data yet (run fdb weekly)")

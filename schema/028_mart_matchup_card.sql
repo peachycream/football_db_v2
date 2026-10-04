@@ -5,10 +5,13 @@
 -- two) with one lineup and one score, so lineups live per FRANCHISE-WEEK in the two child tables, not per game.
 -- home = the franchise MFL flags isHome; away = the other.
 --
--- state  FINAL    the NFL week is complete per the schedule; actuals come from core_mfl_weekly_results/_lineups
---        LIVE     the week has kicked off but is not complete: pairings and lineups from the latest upcoming snapshot
+-- state  FINAL    results are LOADED (core_mfl_weekly_results has the week); actuals come from there and core_mfl_lineups
+--        LIVE     the NFL week has kicked off and the results are not loaded: in progress, or complete per the schedule and
+--                 waiting for the weekly job (a FINAL row without scores would be false). Pairings/lineups: the latest
+--                 upcoming snapshot
 --        PREVIEW  the week has not kicked off: the same
---   It is derived from the SCHEDULE, never from a score or from MFL's `result` (an unplayed week reads 'T', no score).
+--   It is derived from the SCHEDULE and from which results exist, never from a score or from MFL's `result` (an unplayed
+--   week reads 'T', no score).
 -- Records and points-for are through the weeks BEFORE this one, regular season only (week <= lastRegularSeasonWeek),
 --   a week's points counted once per franchise. A franchise's record counts every game (30590: two a week).
 -- proj_*  from the LAST projection snapshot taken before the week's first kickoff (proj_snapshot_at); NULL, never

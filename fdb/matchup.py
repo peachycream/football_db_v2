@@ -253,12 +253,15 @@ def build(conn) -> dict:
     for (season, league, week, home, away, source) in games:
         kick = d.kick.get((season, week))
         complete = week in d.complete.get(season, set())
+        # FINAL means RESULTS ARE LOADED (core_mfl_weekly_results has the week), not merely "the schedule says the week is
+        # over". A week that is complete per the schedule but whose results the weekly job has not loaded yet (Monday night
+        # settles Wednesday 00:15 ET, the job runs 05:00) stays LIVE: it has pairings and lineups but no scores, and a FINAL
+        # row without scores would be a lie that fails the build. The recap picker therefore waits for FINAL.
         if source == "weekly_results":
             state = "FINAL"
         else:
-            state = "FINAL" if complete else ("LIVE" if kick is not None and now >= kick else "PREVIEW")
-        if state != "FINAL" and complete:
-            fails.append(f"{season}/{league} wk{week}: complete week not FINAL")
+            state = "LIVE" if (complete or (kick is not None and now >= kick)) else "PREVIEW"
+            stats["awaiting_results"] += complete
         if source == "weekly_results" and not complete:
             fails.append(f"{season}/{league} wk{week}: results loaded for a week the schedule says is not complete")
         sides = {}
@@ -369,5 +372,6 @@ def build(conn) -> dict:
     summary = (f"{len(card)} games ({', '.join(f'{k} {v}' for k, v in sorted(by_state.items()))}), {len(groups)} group rows, "
                f"{len(players)} starter rows; {len(ungrouped)} ungrouped starters; "
                f"{sum(1 for r in card if r[9])} games with a pre-kickoff projection; "
-               f"{stats['final_zero_scores']} FINAL games with a real 0.00 side")
+               f"{stats['final_zero_scores']} FINAL games with a real 0.00 side; "
+               f"{stats['awaiting_results']} complete-per-schedule games awaiting their results")
     return {"failures": fails[:20], "summary": summary, "ungrouped": ungrouped[:20]}

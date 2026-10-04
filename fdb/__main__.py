@@ -98,7 +98,7 @@ def cmd_card(a):
     from . import card_render
     conn = _conn()
     try:
-        path, card = card_render.render_to_file(conn, a.league, a.season, a.week, a.home, a.away, a.out)
+        path, card = card_render.render_to_file(conn, a.league, a.season, a.week, a.home, a.away, a.out, a.mode)
     except card_render.RenderError as e:
         print(f"card: {e}")
         return 1
@@ -145,6 +145,8 @@ def main(argv=None):
     s.add_argument("--week", type=int)
     s.add_argument("--home")
     s.add_argument("--away")
+    s.add_argument("--mode", choices=("recap", "preview"), help="what a job asks for: recap = the latest week with results "
+                   "loaded, preview = the next week that has not kicked off (each with its featured game); refuses if not ready")
     s.add_argument("--out", help="write here instead of data/cards/")
     s.set_defaults(fn=cmd_card)
     sub.add_parser("parity-ownership", help="Phase 3 gate: /ownership/ owners vs the v1 oracle (see fdb/parity.py)")

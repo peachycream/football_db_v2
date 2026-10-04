@@ -7,7 +7,7 @@ from urllib.parse import urlencode
 
 from flask import Blueprint, Response, jsonify, request
 
-from fdb import card_render, config, matchup_card as mc
+from fdb import card_render, config, matchup_card as mc, matchup_weeks
 
 from .shell import page_shell
 
@@ -54,6 +54,7 @@ PAGE_CSS = """
 .mx-game.on{border-color:var(--accent);background:var(--surf-2)}
 .mx-game .st{float:right;font-size:.65rem;letter-spacing:.06em;color:var(--tx-mut)}
 .mx-game small{display:block;color:var(--tx-mut);margin-top:2px}
+.mx-t{font-size:.78rem;margin-bottom:6px;color:var(--tx-mut)}.mx-t a{color:var(--accent)}
 .mx-banner{border:1px solid var(--edge);border-left:3px solid var(--accent);padding:10px 14px;border-radius:6px;margin-bottom:16px;font-size:.82rem;color:var(--tx-mut)}
 .mx-notes{margin-top:14px;font-size:.78rem;color:var(--tx-mut);max-width:680px}
 .mx-notes li{margin:0 0 4px 18px}
@@ -95,7 +96,18 @@ def page():
                      f'<span class="st">{"&#9733; FEATURED &middot; " if g["featured"] else ""}{_e(g["state"])}{" &middot; RIVALRY" if g["rivalry"] else ""}</span>'
                      f'<b>{_e(g["away_name"])}</b> at <b>{_e(g["home_name"])}</b>'
                      f'<small>{_e(g["away_record"])} / {_e(g["home_record"])} before the week{score}</small></a>')
-        left = (f'<div class="mx-side"><div class="mx-h">LEAGUE</div><div class="mx-chips">{lg_chips}</div>'
+        rt, pt = matchup_weeks.recap_target(conn, league, season), matchup_weeks.preview_target(conn, league, season)
+
+        def target_line(label, t):
+            if t["week"] is None:
+                return f'<div class="mx-t"><b>{label}</b>: {_e(t["reason"])}</div>'
+            link = _url(league=t["league"], season=t["season"], week=t["week"],
+                        home=(t["featured"] or {}).get("home_id"), away=(t["featured"] or {}).get("away_id"))
+            ok = "ready" if t["ready"] else "not ready"
+            why = f' &mdash; {_e(t["reason"])}' if t["reason"] else ""
+            return f'<div class="mx-t"><b>{label}</b>: <a href="{_e(link)}">week {t["week"]}</a> ({ok}){why}</div>'
+        targets = ('<div class="mx-h">WHAT A JOB WOULD POST</div>' + target_line("Recap", rt) + target_line("Preview", pt))
+        left = (f'<div class="mx-side">{targets}<div class="mx-h">LEAGUE</div><div class="mx-chips">{lg_chips}</div>'
                 f'<div class="mx-h">SEASON</div><div class="mx-chips">{s_chips}</div>'
                 f'<div class="mx-h">WEEK (* = not final)</div><div class="mx-chips">{w_chips}</div>'
                 f'<div class="mx-h">{len(gs)} GAMES</div>{rows}</div>')
