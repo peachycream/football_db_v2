@@ -111,6 +111,16 @@ def cmd_card(a):
     return 0
 
 
+def cmd_post(a):
+    from . import discord_post
+    conn = _conn()
+    try:
+        return discord_post.run(conn, a.mode, a.league, send_it=a.send, yes=a.yes, repost=a.repost,
+                                ignore_weekly_status=a.ignore_weekly_status, allow_no_projection=a.allow_no_projection)
+    finally:
+        conn.close()
+
+
 def cmd_alerts(a):
     from . import alerts
     if a.test_push:
@@ -162,6 +172,16 @@ def main(argv=None):
                    "loaded, preview = the next week that has not kicked off (each with its featured game); refuses if not ready")
     s.add_argument("--out", help="write here instead of data/cards/")
     s.set_defaults(fn=cmd_card)
+    s = sub.add_parser("post", help="post the Matchup of the Week card to Discord (league 30590 only, MANUAL). Dry run by default: "
+                       "renders the card and says what would be sent; nothing is sent without --send")
+    s.add_argument("--mode", choices=("recap", "preview"), required=True)
+    s.add_argument("--league", default="30590")
+    s.add_argument("--send", action="store_true", help="actually post (asks to confirm unless --yes)")
+    s.add_argument("--yes", action="store_true", help="skip the confirmation prompt (with --send)")
+    s.add_argument("--repost", action="store_true", help="post again for a week already posted (or one whose attempt never finished)")
+    s.add_argument("--ignore-weekly-status", action="store_true", help="post even though the last weekly run failed or is stale")
+    s.add_argument("--allow-no-projection", action="store_true", help="post a preview that has no pre-kickoff projection")
+    s.set_defaults(fn=cmd_post)
     s = sub.add_parser("alerts", help="status changes for MY rostered players (Phase 12). Dry run by default: no network, "
                        "no writes, nothing sent")
     s.add_argument("--refresh", action="store_true", help="re-fetch the NFL and MFL injury feeds first (network reads)")

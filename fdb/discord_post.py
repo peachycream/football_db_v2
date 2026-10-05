@@ -1,0 +1,243 @@
+"""Post the Matchup of the Week card to Discord. MANUAL and for league 30590 ONLY (Turon's decision). Nothing here runs by
+itself, and nothing is sent unless `fdb post --send` is run (and confirmed) by a person.
+
+    fdb post --mode recap|preview             DRY RUN: renders the card, saves the PNG, says what WOULD be sent
+    fdb post --mode recap|preview --send      asks "Post to Discord?" and, on yes, posts ONE message with ONE image
+
+What makes it safe to run by hand:
+  * the week and the game come from fdb/matchup_weeks.py and the picker, never from "the current week" (v1's bug);
+  * at most one post per league, season, week and mode (app_post_log, claimed BEFORE the request, exported across rebuilds);
+    `--repost` is the one deliberate override and a human has to type it;
+  * the webhook (MOTW_DISCORD_WEBHOOK_30590 in .env, never in git or logs) must be a real Discord webhook URL; a placeholder,
+    a non-https URL or another host is refused; the URL and its token are never printed, not even in an error;
+  * `allowed_mentions` is empty: a card can never ping anyone;
+  * it refuses when the weekly job failed or is stale, when the target week is not ready, and (preview) when no pre-kickoff
+    projection exists, each with its reason; flags exist for the last two so the person decides, not the code.
+Every network call goes through fdb/http.py (the only network path); `fdb rebuild` disables it."""
+import hashlib
+import json
+import re
+import sys
+import time
+import urllib.error
+import uuid
+from datetime import datetime, timedelta, timezone
+
+from . import card_render, config, http, matchup_card as mc, matchup_weeks
+from .timeutil import utcnow
+
+LEAGUES = ("30590",)                      # Turon: 30590 only
+ENV_PREFIX = "MOTW_DISCORD_WEBHOOK_"      # + the league id
+WEBHOOK_RE = re.compile(r"^https://(?:ptb\.|canary\.)?discord(?:app)?\.com/api/webhooks/\d+/[A-Za-z0-9_\-]+$")
+STATUS_MAX_AGE = timedelta(days=9)        # the weekly job runs weekly; older than this and the data may be stale
+MAX_429_RETRIES = 3
+MAX_RETRY_WAIT = 30.0
+
+
+class PostError(RuntimeError):
+    pass
+
+
+def webhook_for(league: str) -> str:
+    return config.env(ENV_PREFIX + league)
+
+
+def valid_webhook(url: str) -> bool:
+    return bool(url) and bool(WEBHOOK_RE.match(url))
+
+
+def redact(text: str, url: str) -> str:
+    """Remove the webhook (and its token on its own) from anything about to be printed or stored."""
+    if not url:
+        return text
+    token = url.rstrip("/").rsplit("/", 1)[-1]
+    out = text.replace(url, "<webhook>")
+    return out.replace(token, "<token>") if len(token) >= 8 else out
+
+
+# ------------------------------------------------------------------ the request --
+def multipart(payload: dict, filename: str, png: bytes):
+    """-> (body, content type). One JSON payload part and one file part, as Discord's webhook API expects."""
+    boundary = "fdb" + uuid.uuid4().hex
+    parts = [
+        f'--{boundary}\r\nContent-Disposition: form-data; name="payload_json"\r\nContent-Type: application/json\r\n\r\n'.encode(),
+        json.dumps(payload).encode("utf-8"), b"\r\n",
+        f'--{boundary}\r\nContent-Disposition: form-data; name="files[0]"; filename="{filename}"\r\nContent-Type: image/png\r\n\r\n'.encode(),
+        png, b"\r\n", f"--{boundary}--\r\n".encode(),
+    ]
+    return b"".join(parts), f"multipart/form-data; boundary={boundary}"
+
+
+def send(url: str, content: str, png: bytes, filename: str):
+    """POST the card. -> (ok, message_id or None, detail). Never raises, never returns the URL. A 429 is retried after the
+    wait Discord names; any other HTTP error or a dead connection is a definite failure."""
+    payload = {"content": content[:1900], "allowed_mentions": {"parse": []},
+               "attachments": [{"id": 0, "filename": filename}]}
+    body, ctype = multipart(payload, filename, png)
+    target = url + ("&" if "?" in url else "?") + "wait=true"   # ask Discord for the message, so we keep its id
+    for attempt in range(MAX_429_RETRIES + 1):
+        try:
+            status, _, resp = http.request(target, data=body, headers={"Content-Type": ctype}, timeout=60)
+            try:
+                mid = str(json.loads(resp).get("id") or "") or None
+            except ValueError:
+                mid = None
+            return 200 <= status < 300, mid, f"HTTP {status}"
+        except urllib.error.HTTPError as e:
+            text = ""
+            try:
+                text = e.read().decode("utf-8", "replace")
+            except Exception:
+                pass
+            if e.code == 429 and attempt < MAX_429_RETRIES:
+                try:
+                    wait = float(json.loads(text).get("retry_after", 1.0))
+                except (ValueError, AttributeError):
+                    wait = 1.0
+                time.sleep(min(max(wait, 0.1), MAX_RETRY_WAIT))
+                continue
+            return False, None, redact(f"HTTP {e.code} {text[:200]}".strip(), url)
+        except Exception as e:   # no connection, timeout, network disabled
+            return False, None, redact(f"{type(e).__name__}: {e}", url)
+    return False, None, "rate limited and out of retries"
+
+
+# --------------------------------------------------------------------- the log --
+def log_row(conn, league, season, week, mode):
+    return conn.execute("SELECT * FROM app_post_log WHERE league_id = ? AND season = ? AND week = ? AND mode = ?",
+                        (league, season, week, mode)).fetchone()
+
+
+def now_text() -> str:
+    return utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def claim(conn, key, sha, home, away, repost: bool, detail: str = ""):
+    """Record that a send is about to happen. -> (ok, reason). Refuses a week that is posted (or whose last attempt never
+    finished) unless `repost`; a 'failed' row is retried without any flag."""
+    league, season, week, mode = key
+    row = log_row(conn, *key)
+    if row is not None and not repost:
+        if row["status"] == "posted":
+            return False, f"already posted at {row['posted_at']} (message {row['message_id'] or 'unknown'}); --repost to post it again"
+        if row["status"] == "sending":
+            return False, (f"a previous attempt (claimed {row['claimed_at']}) never finished, so it MAY have been delivered. "
+                           "Look at the Discord channel; if it is not there, run again with --repost")
+    conn.execute("BEGIN")
+    try:
+        conn.execute("DELETE FROM app_post_log WHERE league_id = ? AND season = ? AND week = ? AND mode = ?", key)
+        conn.execute("""INSERT INTO app_post_log (league_id, season, week, mode, status, claimed_at, png_sha256, home_id, away_id, detail)
+                        VALUES (?, ?, ?, ?, 'sending', ?, ?, ?, ?, ?)""", (*key, now_text(), sha, home, away, detail or None))
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    return True, ""
+
+
+def finish(conn, key, ok: bool, message_id, detail: str):
+    conn.execute("""UPDATE app_post_log SET status = ?, posted_at = ?, message_id = ?, detail = ?
+                    WHERE league_id = ? AND season = ? AND week = ? AND mode = ?""",
+                 ("posted" if ok else "failed", now_text() if ok else None, message_id, detail, *key))
+    conn.commit()
+
+
+# ----------------------------------------------------------------------- gates --
+def weekly_status(now=None):
+    """(ok, reason): the last `fdb weekly` finished OK and recently enough for the data to be current."""
+    try:
+        st = json.loads(config.STATUS_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False, "PIPELINE_STATUS.json is missing or unreadable, so the last weekly run is unknown"
+    if st.get("state") != "ok":
+        return False, f"the last weekly run is '{st.get('state')}', not ok"
+    try:
+        done = datetime.fromisoformat(str(st["finished_at"]).replace("Z", "+00:00"))
+        if done.tzinfo is None:
+            done = done.replace(tzinfo=timezone.utc)
+    except (KeyError, ValueError):
+        return False, "the last weekly run has no finish time"
+    age = (now or utcnow()) - done
+    if age > STATUS_MAX_AGE:
+        return False, f"the last weekly run finished {age.days} days ago; the data may be out of date"
+    return True, ""
+
+
+def caption(card: dict, mode: str) -> str:
+    return f"**{card['league_name']} - Week {card['week']} {'recap' if mode == 'recap' else 'preview'} · Matchup of the Week**"
+
+
+# ------------------------------------------------------------------------- run --
+def run(conn, mode: str, league: str = "30590", send_it: bool = False, yes: bool = False, repost: bool = False,
+        ignore_weekly_status: bool = False, allow_no_projection: bool = False, out=None, ask=input) -> int:
+    """The `fdb post` command. -> exit code (0 = done or a clean dry run, 1 = refused or failed). Prints what it did."""
+    say = print
+    if league not in LEAGUES:
+        say(f"post: posting is enabled for league {', '.join(LEAGUES)} only, not {league}")
+        return 1
+    target = (matchup_weeks.recap_target if mode == "recap" else matchup_weeks.preview_target)(conn, league)
+    if not target["ready"]:
+        say(f"post: {mode} is not ready: {target['reason']}")
+        return 1
+    if mode == "preview" and not target["projected"] and not allow_no_projection:
+        say(f"post: the preview for week {target['week']} has no pre-kickoff projection, so it would have no projected panels "
+            "or win probability. Re-run with --allow-no-projection to post it anyway")
+        return 1
+    ok, why = weekly_status()
+    if not ok and not ignore_weekly_status:
+        say(f"post: {why}. Re-run with --ignore-weekly-status if you have checked the data yourself")
+        return 1
+    f = target["featured"]
+    card = mc.card(conn, league, target["season"], target["week"], f["home_id"], f["away_id"])
+    if card is None:
+        say("post: the featured game is no longer in the mart")
+        return 1
+    try:
+        png = card_render.render_png(card)
+    except card_render.RenderError as e:
+        say(f"post: could not render the card: {e}")
+        return 1
+    sha = hashlib.sha256(png).hexdigest()
+    path = card_render.CARDS_DIR / card_render.filename(card) if out is None else out
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(png)
+    key = (league, target["season"], target["week"], mode)
+    row = log_row(conn, *key)
+    url = webhook_for(league)
+    say(f"post: {mode} for {card['league_name']} {target['season']} week {target['week']}: "
+        f"{card['away']['name']} at {card['home']['name']} ({card['state']}, ranked on {(card['pick'] or {}).get('basis')})")
+    say(f"post: image {path} ({len(png) // 1024} KB, sha256 {sha[:12]})")
+    say(f"post: log: {'not posted yet' if row is None else row['status'] + (' at ' + row['posted_at'] if row['posted_at'] else '')}; "
+        f"webhook: {'set' if valid_webhook(url) else ('NOT A DISCORD WEBHOOK URL' if url else 'not set')}")
+    if not send_it:
+        say("post: DRY RUN. Nothing was sent. Re-run with --send to post it")
+        return 0
+    if not url:
+        say(f"post: NOT SENT: {ENV_PREFIX}{league} is not set in .env, so there is nowhere to post")
+        return 1
+    if not valid_webhook(url):
+        say(f"post: NOT SENT: {ENV_PREFIX}{league} is not a Discord webhook URL (https://discord.com/api/webhooks/<id>/<token>)")
+        return 1
+    if not yes:
+        if not sys.stdin or not sys.stdin.isatty():
+            say("post: NOT SENT: --send asks for confirmation and there is no terminal here; pass --yes to confirm in advance")
+            return 1
+        try:
+            answer = ask(f"Post this {mode} to Discord now? Type yes: ")
+        except (EOFError, OSError):   # a "terminal" that cannot be read is no terminal
+            say("post: NOT SENT: --send asks for confirmation and the terminal cannot be read; pass --yes to confirm in advance")
+            return 1
+        if answer.strip().lower() != "yes":
+            say("post: cancelled; nothing was sent")
+            return 1
+    ok, why = claim(conn, key, sha, f["home_id"], f["away_id"], repost, detail="reposted" if (repost and row is not None) else "")
+    if not ok:
+        say(f"post: NOT SENT: {why}")
+        return 1
+    sent, mid, detail = send(url, caption(card, mode), png, path.name)
+    finish(conn, key, sent, mid, detail)
+    if sent:
+        say(f"post: POSTED ({detail}); Discord message id {mid or 'unknown'}")
+        return 0
+    say(f"post: FAILED: {detail}. Nothing is marked posted; run again to retry")
+    return 1
