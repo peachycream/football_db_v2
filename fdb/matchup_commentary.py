@@ -173,11 +173,34 @@ def _next_games(conn, card):
     return f"In week {card['week'] + 1}, " + "; ".join(parts) + "." if parts else None
 
 
+def _rank_text(value, order):
+    """'1st', 'tied for 1st' ... of a value in a descending list (ties share a rank)."""
+    r = _rank(value, order)
+    ties = sum(1 for v in order if abs(v - value) <= 1e-9)
+    return f"tied for {ordinal(r)}" if ties > 1 else ordinal(r)
+
+
+def pre_context(conn, card) -> dict:
+    """Where every team in the league stands going into the week: win percentage and points for (a week's points once),
+    from the mart's completed-weeks figures. Empty when nobody has played yet."""
+    rows = conn.execute("""SELECT home_id, away_id, home_w, home_l, home_t, away_w, away_l, away_t, home_pf, away_pf FROM mart_matchup_card
+                           WHERE league_id = ? AND season = ? AND week = ?""", (card["league_id"], card["season"], card["week"])).fetchall()
+    team = {}
+    for r in rows:
+        for who in ("home", "away"):
+            w, l, t = r[f"{who}_w"], r[f"{who}_l"], r[f"{who}_t"]
+            team[r[f"{who}_id"]] = ((w + 0.5 * t) / (w + l + t) if (w + l + t) else None, r[f"{who}_pf"], w + l + t)
+    played = [v for v in team.values() if v[2]]
+    return {"teams": len(team), "wp": sorted((v[0] for v in played), reverse=True), "pf": sorted((v[1] for v in played), reverse=True),
+            "by_team": team, "any_played": bool(played)}
+
+
 def preview_paragraphs(conn, card) -> list:
     if card["state"] == "FINAL":
         return []
     H, A = card["home"], card["away"]
     out = []
+    # 1. the matchup
     t = (f"{A['name']} ({A['w']}-{A['l']}{'-' + str(A['t']) if A['t'] else ''}) visit {H['name']} "
          f"({H['w']}-{H['l']}{'-' + str(H['t']) if H['t'] else ''}).")
     if card["rivalry"]:
@@ -190,6 +213,30 @@ def preview_paragraphs(conn, card) -> list:
             t += f", a {max(card['win_prob'].values()) * 100:.0f}% edge on v1's model"
         t += "."
     out.append({"lead": "The matchup", "text": t})
+    # 2. why it is the featured game
+    pk = card.get("pick")
+    if card.get("featured") and pk:
+        qh, qa = pk["quality_home"], pk["quality_away"]
+        t = f"It ranks first of {pk['of']} games on the picker's score. " if pk["of"] > 1 else ""
+        t += (f"Both teams rate highly ({qa:.2f} and {qh:.2f} on its 0-to-1 scale)" if min(qh, qa) > 0.5
+              else f"The teams rate {qa:.2f} and {qh:.2f} on its 0-to-1 scale")
+        if pk["closeness"] is not None and H["proj"] is not None and A["proj"] is not None:
+            gap, total = abs(H["proj"] - A["proj"]), H["proj"] + A["proj"]
+            t += f", and their projected totals are only {gap:,.1f} points apart, {gap / total * 100:.1f}% of the combined {total:,.0f}"
+        out.append({"lead": "Why this game", "text": t + "."})
+    # 3. the stakes: where both teams stand in the league
+    ctx = pre_context(conn, card)
+    if ctx["any_played"] and ctx["teams"] > 1:
+        bits = []
+        for s_ in (A, H):
+            wp, pf, n = ctx["by_team"].get(s_["id"], (None, 0.0, 0))
+            if n:
+                bits.append(f"{s_['name']} are {s_['w']}-{s_['l']}{'-' + str(s_['t']) if s_['t'] else ''} "
+                            f"({_rank_text(wp, ctx['wp'])} of {ctx['teams']} by record) with {pf:,.0f} points for "
+                            f"({_rank_text(pf, ctx['pf'])} in the league)")
+        if bits:
+            out.append({"lead": "The stakes", "text": "; ".join(bits) + "."})
+    # 4. the position battles
     board = card["board"]
     if board and card["board_basis"] == "projected":
         homes = sorted((b for b in board if b["edge"] > 0), key=lambda b: -b["edge"])
@@ -199,12 +246,17 @@ def preview_paragraphs(conn, card) -> list:
             bits.append(f"{H['name']} lead " + ", ".join(f"{b['grp']} (+{b['edge']:,.1f})" for b in homes[:3]))
         if aways:
             bits.append(f"{A['name']} lead " + ", ".join(f"{b['grp']} (+{abs(b['edge']):,.1f})" for b in aways[:3]))
-        out.append({"lead": "Position battles", "text": "; ".join(bits) + "."})
+        text = "; ".join(bits) + "."
+        top = max(board, key=lambda b: abs(b["edge"]))
+        text += f" The biggest gap is {top['grp']}, where {(H if top['edge'] > 0 else A)['name']} lead by {abs(top['edge']):,.1f}."
+        out.append({"lead": "Position battles", "text": text})
+    # 5. players to watch
     pl = card["players"]
     if card["players_basis"] == "projected" and (pl["home"] or pl["away"]):
         bits = [f"{s_['name']}: " + ", ".join(f"{p['name']} ({p['position']}) {p['value']:,.1f}" for p in pl[who])
                 for s_, who in ((A, "away"), (H, "home")) if pl[who]]
         out.append({"lead": "Players to watch", "text": "; ".join(bits) + "."})
+    # 6. the series
     s = card["series"]
     if s["meetings"]:
         lead = (f"{H['name']} lead {s['home_wins']}-{s['away_wins']}" if s["home_wins"] > s["away_wins"]

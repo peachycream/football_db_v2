@@ -162,14 +162,46 @@ class Preview(unittest.TestCase):
             self.assertIn("Players to watch", t)
             self.assertIn("The series", t)
 
+    def test_a_preview_explains_why_it_is_the_featured_game_and_where_both_teams_stand(self):
+        with MartEnv() as env:
+            env.seed_all()
+            env.build(now=BEFORE_KICKOFF)
+            top = mc.games(env.c, L, 2026, 3)[0]
+            c = mc.card(env.c, L, 2026, 3, top["home_id"], top["away_id"])
+            t = lead_text(cm.preview_paragraphs(env.c, c))
+            self.assertIn("It ranks first of 4 games on the picker's score.", t["Why this game"])
+            self.assertIn("projected totals are only", t["Why this game"])
+            self.assertIn("by record", t["The stakes"])
+            self.assertIn("points for", t["The stakes"])
+            self.assertIn("The biggest gap is", t["Position battles"])
+            second = mc.games(env.c, L, 2026, 3)[1]
+            c2 = mc.card(env.c, L, 2026, 3, second["home_id"], second["away_id"])
+            self.assertNotIn("Why this game", lead_text(cm.preview_paragraphs(env.c, c2)))   # only the featured game is explained
+
+    def test_rank_text_names_ties(self):
+        self.assertEqual(cm._rank_text(5.0, [9.0, 5.0, 5.0, 1.0]), "tied for 2nd")
+        self.assertEqual(cm._rank_text(9.0, [9.0, 5.0, 5.0, 1.0]), "1st")
+        self.assertEqual(cm._rank_text(1.0, [9.0, 5.0, 5.0, 1.0]), "4th")
+
+    def test_nobody_has_played_means_no_stakes_paragraph(self):
+        with MartEnv() as env:
+            env.seed_all()
+            env.build(now=BEFORE_KICKOFF)
+            c = mc.card(env.c, L, 2026, 3, "0001", "0002")
+            env.c.execute("UPDATE mart_matchup_card SET home_w = 0, home_l = 0, home_t = 0, away_w = 0, away_l = 0, away_t = 0 WHERE week = 3")
+            self.assertNotIn("The stakes", lead_text(cm.preview_paragraphs(env.c, c)))
+
     def test_a_preview_without_a_projection_says_nothing_projected(self):
         with MartEnv() as env:
             env.seed_all(preview_projection=False, post_projection=False)
             env.build(now=BEFORE_KICKOFF)
             c = mc.card(env.c, L, 2026, 3, "0001", "0002")
             t = lead_text(cm.preview_paragraphs(env.c, c))
-            self.assertEqual(set(t), {"The matchup", "The series"})
+            self.assertEqual(set(t), {"The matchup", "Why this game", "The stakes", "The series"})
             self.assertNotIn("projections have", t["The matchup"])
+            self.assertNotIn("projected totals", t["Why this game"])            # no closeness without projections
+            self.assertNotIn("Position battles", t)
+            self.assertNotIn("Players to watch", t)
 
 
 class BenchColumns(unittest.TestCase):

@@ -468,6 +468,52 @@ class Upcoming(unittest.TestCase):
         order = registry.weekly_loaders()
         self.assertLess(order.index("mfl.upcoming_games"), order.index("mfl.upcoming_lineups"))
 
+    @staticmethod
+    def without_lineups(payload, keep=()):
+        """The shape MFL answered for week 5 on 2026-10-05: lineups only for some franchises (or none)."""
+        for m in payload["weeklyResults"]["matchup"]:
+            for f in m["franchise"]:
+                if f["id"] not in keep:
+                    for k in ("player", "starters", "nonstarters", "optimal"):
+                        f.pop(k, None)
+        return payload
+
+    def test_pairings_and_the_lineups_that_exist_load_when_most_franchises_have_none(self):
+        """Found by the Wednesday rehearsal: 2 of 32 franchises had a week-5 lineup. That must not fail the weekly job."""
+        with Env() as env:
+            env.seed({})
+            write_raw("mfl", "weeklyResultsUpcoming", "2026/11111/REG03", self.without_lineups(unplayed_week(3), keep=("0001",)))
+            for lid in ("mfl.upcoming_games", "mfl.upcoming_lineups"):
+                res = env.load_all(lid)
+                self.assertEqual(res[0]["failures"], [], (lid, res))
+            self.assertEqual(env.c.execute("SELECT COUNT(*) FROM core_mfl_upcoming_games").fetchone()[0], 8)             # every game is known
+            self.assertEqual({r[0] for r in env.c.execute("SELECT franchise_id FROM core_mfl_upcoming_lineups")}, {"0001"})   # one lineup
+
+    def test_a_week_with_no_lineups_at_all_still_loads_its_pairings(self):
+        with Env() as env:
+            env.seed({})
+            write_raw("mfl", "weeklyResultsUpcoming", "2026/11111/REG03", self.without_lineups(unplayed_week(3)))
+            games = env.load_all("mfl.upcoming_games")[0]
+            self.assertEqual(games["failures"], [], games)
+            lineups = env.load_all("mfl.upcoming_lineups")[0]
+            self.assertEqual(lineups["failures"], [], lineups)                      # the source's own answer: none set yet
+            self.assertEqual(env.c.execute("SELECT COUNT(*) FROM core_mfl_upcoming_lineups").fetchone()[0], 0)
+
+    def test_a_lineup_for_a_franchise_that_is_not_playing_is_still_refused(self):
+        with Env() as env:
+            env.seed({})
+            write_raw("mfl", "weeklyResultsUpcoming", "2026/11111/REG03", unplayed_week(3))
+            env.load_all("mfl.upcoming_games")
+            ld = get("mfl.upcoming_lineups")
+            snap = fw.scopes(env.c, ld)[0].snapshot
+            env.c.execute("BEGIN")
+            env.c.execute("INSERT INTO load_log (loader, scope, raw_path, raw_sha256, rows_in) VALUES ('x','x','x','x',1)")
+            env.c.execute("""INSERT INTO core_mfl_upcoming_lineups (season, season_type, week, league_id, snapshot_at, franchise_id, id, status, load_id)
+                             VALUES (2026, 'REG', 3, ?, ?, '9999', '1', 'starter', 1)""", (L, snap))
+            fails = ld.checks(env.c, fw.Scope(2026, "REG", 3, league=L, snapshot=snap))
+            env.c.execute("ROLLBACK")
+            self.assertTrue(any("not in the pairings" in f for f in fails), fails)
+
 
 class Registry(unittest.TestCase):
     def test_both_tables_are_owned_and_weekly_in_order(self):

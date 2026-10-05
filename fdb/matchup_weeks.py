@@ -19,19 +19,23 @@ from . import matchup_pick
 
 
 def _week_status(conn, league, season):
-    """{week: {"state": FINAL | LIVE | PREVIEW, "games": n, "playoff": bool, "projected": bool}} for one league-season.
-    A week is FINAL only if EVERY game is FINAL; PREVIEW only if every game is."""
+    """{week: {"state": FINAL | LIVE | PREVIEW, "games": n, "playoff": bool, "projected": bool, "snapshot": bool,
+    "unprojected": games with a side that has no projected total}} for one league-season. A week is FINAL only if EVERY game is
+    FINAL; PREVIEW only if every game is. `projected` = every game has both totals; `snapshot` = a pre-kickoff projection
+    snapshot exists at all (so an unprojected game then means a LINEUP is missing, not a projection)."""
     out = {}
-    for r in conn.execute("""SELECT week, state, is_playoff, home_proj, away_proj FROM mart_matchup_card
+    for r in conn.execute("""SELECT week, state, is_playoff, home_proj, away_proj, proj_snapshot_at FROM mart_matchup_card
                              WHERE league_id = ? AND season = ?""", (league, season)):
-        w = out.setdefault(r["week"], {"states": set(), "games": 0, "playoff": False, "projected": True})
+        w = out.setdefault(r["week"], {"states": set(), "games": 0, "playoff": False, "snapshot": False, "unprojected": 0})
         w["states"].add(r["state"])
         w["games"] += 1
         w["playoff"] = w["playoff"] or bool(r["is_playoff"])
-        w["projected"] = w["projected"] and r["home_proj"] is not None and r["away_proj"] is not None
+        w["snapshot"] = w["snapshot"] or r["proj_snapshot_at"] is not None
+        w["unprojected"] += r["home_proj"] is None or r["away_proj"] is None
     for w in out.values():
         s = w.pop("states")
         w["state"] = "FINAL" if s == {"FINAL"} else "PREVIEW" if s == {"PREVIEW"} else "LIVE"
+        w["projected"] = w["unprojected"] == 0
     return out
 
 
@@ -53,6 +57,16 @@ def _featured(conn, league, season, week):
     p = matchup_pick.pick(conn, league, season, week)
     f = p["featured"]
     return None if f is None else {"home_id": f["home_id"], "away_id": f["away_id"], "basis": p["basis"], "score": f["score"]}
+
+
+def _unprojected_reason(w):
+    """Why a PREVIEW week is not fully projected, or None when it is."""
+    if w["projected"]:
+        return None
+    if not w["snapshot"]:
+        return "no projection was captured before kickoff, so the preview has no projected panels or win probability"
+    return (f"{w['unprojected']} of {w['games']} games have a side with no lineup yet, so their projected totals cannot be "
+            "computed (MFL sets a new week's lineups as it becomes the current week); try again later")
 
 
 def recap_target(conn, league=None, season=None) -> dict:
@@ -86,8 +100,7 @@ def preview_target(conn, league=None, season=None) -> dict:
         week = upcoming[0]
         return {**base, "week": week, "state": "PREVIEW", "ready": True, "projected": weeks[week]["projected"],
                 "is_playoff": weeks[week]["playoff"], "featured": _featured(conn, league, season, week),
-                "reason": None if weeks[week]["projected"] else
-                "no projection was captured before kickoff, so the preview has no projected panels or win probability"}
+                "reason": _unprojected_reason(weeks[week])}
     live = sorted(w for w, v in weeks.items() if v["state"] == "LIVE")
     if live:
         week = live[-1]

@@ -98,6 +98,19 @@ class Preview(unittest.TestCase):
             self.assertEqual((t["ready"], t["projected"]), (True, False))
             self.assertIn("no projection was captured before kickoff", t["reason"])
 
+    def test_missing_lineups_are_named_as_the_reason_not_a_missing_projection(self):
+        """A projection snapshot exists but a franchise has no lineup yet: say THAT, not "no projection was captured"."""
+        with MartEnv() as env:
+            env.seed_all()
+            env.c.execute("DELETE FROM core_mfl_upcoming_lineups WHERE franchise_id IN ('0001', '0002')")
+            env.c.commit()
+            env.build(now=BEFORE_KICKOFF)
+            t = mw.preview_target(env.c, L)
+            self.assertEqual((t["ready"], t["projected"]), (True, False))
+            self.assertIn("have a side with no lineup yet", t["reason"])
+            self.assertNotIn("no projection was captured", t["reason"])
+            self.assertIn("3 of 4 games", t["reason"])                              # every game touches 0001 or 0002 except 0003 v 0004
+
     def test_the_recap_and_the_preview_are_different_weeks(self):
         with MartEnv() as env:
             env.seed_all()
@@ -203,6 +216,61 @@ class Surfaces(unittest.TestCase):
             self.assertIn("week 2</a> (ready)", body)
             self.assertIn("week 3</a> (not ready)", body)
             self.assertIn("already kicked off", body)
+
+
+
+class Refresh(unittest.TestCase):
+    """`fdb matchup-refresh`: the three pre-game loaders, then the builder, then what is ready. Posts nothing."""
+
+    def run_refresh(self, env, now, results=None):
+        import contextlib
+        import io
+        from fdb import matchup_refresh, weekly
+        calls = []
+
+        def fake(conn, lid):
+            calls.append(lid)
+            return (results or {}).get(lid, {"loader": lid, "fetched": 1, "cached": 0, "loaded": 2, "failures": [], "rc": 0})
+        buf = io.StringIO()
+        with mock.patch.object(weekly, "run_loader", fake), mock.patch.dict(os.environ, {"FDB_NOW": now}), contextlib.redirect_stdout(buf):
+            rc = matchup_refresh.run(env.c, L)
+        return rc, buf.getvalue(), calls
+
+    def test_runs_the_three_pre_game_loaders_in_order_then_builds_and_reports(self):
+        from fdb import matchup_refresh
+        with MartEnv() as env:
+            env.seed_all()
+            rc, out, calls = self.run_refresh(env, BEFORE_KICKOFF)
+            self.assertEqual(calls, list(matchup_refresh.LOADERS))
+            self.assertEqual(rc, 0, out)
+            self.assertIn("matchup.build:", out)
+            self.assertIn("recap: week 2 ready", out)
+            self.assertIn("preview: week 3 ready", out)
+
+    def test_a_failing_loader_is_a_nonzero_exit_but_it_still_builds_and_reports(self):
+        with MartEnv() as env:
+            env.seed_all()
+            bad = {"mfl.projected_scores": {"loader": "mfl.projected_scores", "fetched": 0, "cached": 0, "loaded": 0,
+                                            "failures": ["fetch 2026/11111/REG03: HTTP 429"], "rc": 1}}
+            rc, out, calls = self.run_refresh(env, BEFORE_KICKOFF, bad)
+            self.assertEqual(rc, 1)
+            self.assertIn("FAILED 1", out)
+            self.assertIn("matchup.build:", out)
+            self.assertEqual(len(calls), 3)
+
+    def test_after_kickoff_it_says_the_new_projection_will_not_be_used(self):
+        with MartEnv() as env:
+            env.seed_all()
+            rc, out, _ = self.run_refresh(env, AFTER_KICKOFF)
+            self.assertIn("already kicked off", out)
+            self.assertIn("will NOT be used", out)
+
+    def test_it_never_posts(self):
+        import inspect
+        from fdb import matchup_refresh
+        src = inspect.getsource(matchup_refresh)
+        self.assertNotIn("discord_post", src)
+        self.assertNotIn("send(", src)
 
 
 if __name__ == "__main__":

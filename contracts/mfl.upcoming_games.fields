@@ -1,6 +1,5 @@
-# Recorded from live responses 2026-10-03 (30590 2026 wk4, unplayed). A missing field fails the load.
+# Recorded from live responses 2026-10-03 and 2026-10-05 (30590 wk4 and wk5, unplayed). A missing field fails the load.
+# Only the PAIRING is required. starters / nonstarters / player are OPTIONAL: MFL fills a new week's lineups in late (wk5 on
+# 2026-10-05: 2 of 32 franchises in 30590, none in 57653), and a week's pairings must load without them.
 id
 isHome
-starters
-nonstarters
-player

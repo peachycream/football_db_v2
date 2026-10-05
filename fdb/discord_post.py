@@ -238,8 +238,8 @@ def run(conn, mode: str, league: str = "30590", send_it: bool = False, yes: bool
         say(f"post: {mode} is not ready: {target['reason']}")
         return 1
     if mode == "preview" and not target["projected"] and not allow_no_projection:
-        say(f"post: the preview for week {target['week']} has no pre-kickoff projection, so it would have no projected panels "
-            "or win probability. Re-run with --allow-no-projection to post it anyway")
+        say(f"post: the preview for week {target['week']} is not fully projected: {target['reason']}. "
+            "Re-run with --allow-no-projection to post it anyway")
         return 1
     ok, why = weekly_status()
     if not ok and not ignore_weekly_status:

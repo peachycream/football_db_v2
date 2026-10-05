@@ -662,15 +662,22 @@ class UpcomingGamesLoader(ProjectedScoresLoader):
 
 
 class UpcomingLineupsLoader(UpcomingGamesLoader):
-    """Reads mfl.upcoming_games' raw file: franchise.player[] (id, status) per franchise."""
+    """Reads mfl.upcoming_games' raw file: franchise.player[] (id, status) per franchise.
+
+    A franchise WITHOUT a lineup is normal, not a failure: found by the Wednesday rehearsal on 2026-10-05, when MFL answered
+    week 5 (two weeks ahead of the week in progress) with a lineup for only 2 of 30590's 32 franchises, and with none at all for
+    57653. MFL fills a new week's lineups in as it becomes the current week. So this table holds the lineups that exist, an
+    empty answer is valid (the source's own), and nothing is guessed for the rest: a game whose franchise has no lineup has no
+    projected total, and the preview says so (fdb/matchup_weeks.py)."""
     id = "mfl.upcoming_lineups"
     table = "core_mfl_upcoming_lineups"
     fetches = False
 
+    def empty_is_valid(self, conn, scope):
+        return True
+
     def parse(self, payload):
         week, games = WeeklyResultsLoader._games(payload)
-        if not games:
-            return self.expected_fields(), []
         rows, seen = [], {}
         for frs in games:
             for f in frs:
@@ -685,15 +692,18 @@ class UpcomingLineupsLoader(UpcomingGamesLoader):
                 if listed != {p["id"] for p in ps if p.get("status") == "starter"}:
                     raise ValueError(f"franchise {f['id']}: `starters` disagrees with the players marked starter")
                 rows += [{**p, "franchise_id": f["id"], "week": week} for p in ps]
+        if not rows:   # no franchise has a lineup yet: nothing to contradict the contract
+            return self.expected_fields(), []
         return sorted({k for r in rows for k in r} - {"franchise_id", "week"}), rows
 
     def checks(self, conn, scope):
+        """Lineups may be missing for some franchises; they may not exist for a franchise that is not playing."""
         q = (scope.season, scope.league, scope.week, scope.snapshot)
-        have = conn.execute("SELECT COUNT(DISTINCT id) FROM core_mfl_upcoming_games WHERE season = ? AND league_id = ? AND week = ? "
-                            "AND snapshot_at = ?", q).fetchone()[0]
-        got = conn.execute("SELECT COUNT(DISTINCT franchise_id) FROM core_mfl_upcoming_lineups WHERE season = ? AND league_id = ? "
-                           "AND week = ? AND snapshot_at = ?", q).fetchone()[0]
-        return [f"{scope.label}: {have} franchises in upcoming_games but {got} with a lineup"] if have and have != got else []
+        stray = conn.execute("""SELECT DISTINCT l.franchise_id FROM core_mfl_upcoming_lineups l
+                                WHERE l.season = ? AND l.league_id = ? AND l.week = ? AND l.snapshot_at = ?
+                                AND NOT EXISTS (SELECT 1 FROM core_mfl_upcoming_games g WHERE g.season = l.season AND g.league_id = l.league_id
+                                AND g.week = l.week AND g.snapshot_at = l.snapshot_at AND g.id = l.franchise_id)""", q).fetchall()
+        return [f"{scope.label}: lineups for franchises that are not in the pairings: {[r[0] for r in stray]}"] if stray else []
 
 
 LOADERS = (LeagueLoader, DivisionsLoader, ConferencesLoader, FranchisesLoader, RostersLoader,

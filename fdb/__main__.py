@@ -111,6 +111,15 @@ def cmd_card(a):
     return 0
 
 
+def cmd_matchup_refresh(a):
+    from . import matchup_refresh
+    conn = _conn()
+    try:
+        return matchup_refresh.run(conn, a.league)
+    finally:
+        conn.close()
+
+
 def cmd_post(a):
     from . import discord_post
     conn = _conn()
@@ -172,6 +181,10 @@ def main(argv=None):
                    "loaded, preview = the next week that has not kicked off (each with its featured game); refuses if not ready")
     s.add_argument("--out", help="write here instead of data/cards/")
     s.set_defaults(fn=cmd_card)
+    s = sub.add_parser("matchup-refresh", help="re-fetch the next week's pairings, lineups and projections, rebuild the card data, and "
+                       "say whether a recap and a preview are ready (for a late-set lineup or a Thursday refresh). Posts nothing")
+    s.add_argument("--league", default="30590")
+    s.set_defaults(fn=cmd_matchup_refresh)
     s = sub.add_parser("post", help="post the Matchup of the Week card to Discord (league 30590 only, MANUAL). Dry run by default: "
                        "renders the card and says what would be sent; nothing is sent without --send")
     s.add_argument("--mode", choices=("recap", "preview"), required=True)
