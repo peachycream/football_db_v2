@@ -7,7 +7,7 @@ from urllib.parse import urlencode
 
 from flask import Blueprint, Response, jsonify, request
 
-from fdb import card_render, config, matchup_card as mc, matchup_weeks
+from fdb import card_render, config, matchup_card as mc, matchup_commentary, matchup_weeks
 
 from .shell import page_shell
 
@@ -56,6 +56,7 @@ PAGE_CSS = """
 .mx-game small{display:block;color:var(--tx-mut);margin-top:2px}
 .mx-t{font-size:.78rem;margin-bottom:6px;color:var(--tx-mut)}.mx-t a{color:var(--accent)}
 .mx-banner{border:1px solid var(--edge);border-left:3px solid var(--accent);padding:10px 14px;border-radius:6px;margin-bottom:16px;font-size:.82rem;color:var(--tx-mut)}
+.mx-break{max-width:680px;margin-top:16px;font-size:.88rem;line-height:1.55}.mx-break p{margin:0 0 10px}
 .mx-notes{margin-top:14px;font-size:.78rem;color:var(--tx-mut);max-width:680px}
 .mx-notes li{margin:0 0 4px 18px}
 </style>
@@ -120,11 +121,19 @@ def page():
                 notes += "".join(f"<li>{_e(n)}</li>" for n in c["pick"]["why"])
             facts = (f"State {c['state']}; lineups from {c['lineup_source'].replace('_', ' ')}; "
                      f"projection snapshot {c['proj_snapshot_at'] or 'none before kickoff'}.")
-            main = (f'<div class="mx-main">{mc.card_html(c)}'
-                    f'<div class="mx-notes"><div>{_e(facts)} <a href="/api/matchup/card?'
-                    f'{_e(urlencode({"league": league, "season": season, "week": week, "home": pick["home_id"], "away": pick["away_id"]}))}">card data (JSON)</a> &middot; <a href="/matchup/card/?'
-                    f'{_e(urlencode({"league": league, "season": season, "week": week, "home": pick["home_id"], "away": pick["away_id"]}))}">card only</a> &middot; <a href="/matchup/card.png?'
-                    f'{_e(urlencode({"league": league, "season": season, "week": week, "home": pick["home_id"], "away": pick["away_id"]}))}">PNG (the image that would be posted)</a></div>'
+            q = urlencode({"league": league, "season": season, "week": week, "home": pick["home_id"], "away": pick["away_id"]})
+            paras = matchup_commentary.paragraphs(conn, c)
+            breakdown = ""
+            if paras:
+                body = "".join(f'<p><b>{_e(p["lead"])}.</b> {_e(p["text"])}</p>' for p in paras)
+                breakdown = (f'<div class="mx-break"><div class="mx-h">THE BREAKDOWN (posted as the third message)</div>{body}</div>')
+            links = (f'<a href="/api/matchup/card?{_e(q)}">card data (JSON)</a> &middot; '
+                     f'<a href="/matchup/card/?{_e(q)}">card only</a> &middot; '
+                     f'<a href="/matchup/panel.png?which=cover&amp;{_e(q)}">cover image</a> &middot; '
+                     f'<a href="/matchup/panel.png?which=board&amp;{_e(q)}">board image</a> &middot; '
+                     f'<a href="/matchup/card.png?{_e(q)}">whole card as one tall PNG</a>')
+            main = (f'<div class="mx-main">{mc.card_html(c)}{breakdown}'
+                    f'<div class="mx-notes"><div>{_e(facts)} {links}</div>'
                     f'{"<ul>" + notes + "</ul>" if notes else ""}</div></div>')
         return page_shell("Matchup card", PAGE_CSS + banner + f'<div class="mx-wrap">{left}{main}</div>', active=PATH)
     finally:
@@ -163,6 +172,27 @@ def card_png():
         png = card_render.render_png(c)
     except card_render.RenderError as e:
         return f"Could not render the card: {e}", 503
+    return Response(png, mimetype="image/png", headers={"Cache-Control": "no-store"})
+
+
+@bp.route("/matchup/panel.png")
+def panel_png():
+    """One of the two landscape panels a Discord post carries (`which` = cover or board). Rendered on request, never cached."""
+    which = request.args.get("which", "")
+    if which not in mc.PANELS:
+        return f"which must be one of: {', '.join(mc.PANELS)}", 400
+    conn = _db()
+    try:
+        league, season, week, _ = _resolve(conn)
+        c = mc.card(conn, league, season, week, request.args.get("home"), request.args.get("away")) if league else None
+    finally:
+        conn.close()
+    if c is None:
+        return "No such game.", 404
+    try:
+        png = card_render.render_panels(c)[which]
+    except card_render.RenderError as e:
+        return f"Could not render the panel: {e}", 503
     return Response(png, mimetype="image/png", headers={"Cache-Control": "no-store"})
 
 

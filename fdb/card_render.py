@@ -72,39 +72,53 @@ def embed_logos(card: dict) -> dict:
     return out
 
 
-def standalone_html(card: dict) -> str:
+def standalone_html(card: dict, panel: str = None) -> str:
+    body = mc.panel_html(card, panel) if panel else mc.card_html(card)
     return ('<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Matchup card</title></head>'
-            f'<body style="margin:0;padding:0;background:#0d1220">{mc.card_html(card)}</body></html>')
+            f'<body style="margin:0;padding:0;background:#0d1220">{body}</body></html>')
 
 
-def render_png(card: dict, scale: int = SCALE, embed: bool = True) -> bytes:
-    """The card as PNG bytes. embed=False renders the logos by URL (tests and offline checks)."""
+def _shoot(htmls: list, scale: int, width: int = VIEWPORT_WIDTH) -> list:
+    """Screenshot the `.mc` element of each standalone document. One browser launch for all of them."""
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
         raise RenderError("playwright is not installed (pip install playwright && playwright install chromium)") from None
-    html = standalone_html(embed_logos(card) if embed else card)
+    out = []
     try:
         with sync_playwright() as pw:
             browser = pw.chromium.launch()
             try:
-                page = browser.new_page(viewport={"width": VIEWPORT_WIDTH, "height": 1000}, device_scale_factor=scale)
+                page = browser.new_page(viewport={"width": width, "height": 1000}, device_scale_factor=scale)
                 page.set_default_timeout(30000)
-                page.set_content(html, wait_until="load")
-                page.wait_for_function("Array.from(document.images).every(i => i.complete)")
-                el = page.query_selector(".mc")
-                if el is None:
-                    raise RenderError("the card element was not in the rendered page")
-                png = el.screenshot(type="png")
+                for html in htmls:
+                    page.set_content(html, wait_until="load")
+                    page.wait_for_function("Array.from(document.images).every(i => i.complete)")
+                    el = page.query_selector(".mc")
+                    if el is None:
+                        raise RenderError("the card element was not in the rendered page")
+                    out.append(el.screenshot(type="png"))
             finally:
                 browser.close()
     except RenderError:
         raise
     except Exception as e:
         raise RenderError(f"headless Chromium failed: {type(e).__name__}: {str(e).splitlines()[0] if str(e) else ''}") from e
-    if not png.startswith(b"\x89PNG"):
+    if not all(p.startswith(b"\x89PNG") for p in out):
         raise RenderError("the screenshot is not a PNG")
-    return png
+    return out
+
+
+def render_png(card: dict, scale: int = SCALE, embed: bool = True) -> bytes:
+    """The whole card as one tall PNG (the review page). embed=False renders the logos by URL (tests and offline checks)."""
+    return _shoot([standalone_html(embed_logos(card) if embed else card)], scale)[0]
+
+
+def render_panels(card: dict, scale: int = SCALE, embed: bool = True) -> dict:
+    """{"cover": png, "board": png}: the LANDSCAPE panels a Discord post carries (a tall image shows tiny there)."""
+    c = embed_logos(card) if embed else card
+    docs = [standalone_html(c, panel=name) for name in mc.PANELS]
+    return dict(zip(mc.PANELS, _shoot(docs, scale)))
 
 
 def filename(card: dict) -> str:

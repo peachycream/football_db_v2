@@ -196,7 +196,10 @@ def card(conn, league, season, week, home, away):
     if final and H["score"] is not None and A["score"] is not None:
         margin = abs(H["score"] - A["score"])
         winner = "home" if H["score"] > A["score"] else "away" if A["score"] > H["score"] else "tie"
+    bench = {k: {"name": r[f"{k}_bench_best_name"], "position": r[f"{k}_bench_best_pos"], "score": r[f"{k}_bench_best_score"]}
+             for k in ("home", "away")}
     out = {"league_id": league, "league_name": league_name(conn, league), "season": season, "week": week, "state": r["state"],
+           "is_playoff": bool(r["is_playoff"]), "bench": bench,
            "home": H, "away": A, "rivalry": bool(r["is_division_rivalry"]), "winner": winner, "margin": margin,
            "win_prob": None if final else win_probability(H["proj"], A["proj"]),
            "board": board, "board_basis": board_basis, "biggest": biggest,
@@ -312,7 +315,7 @@ def _logo(url):
     return url if url and (re.match(r"^https?://", url) or _DATA_LOGO.match(url)) else None
 
 
-def card_html(c) -> str:
+def _sections(c) -> dict:
     AW, HM = c["away"], c["home"]   # left panel = away, right panel = home ("away at home")
     final, state = c["state"] == "FINAL", c["state"]
     lt, rt = tint(AW["color"], 0.30), tint(HM["color"], 0.30)
@@ -385,8 +388,10 @@ def card_html(c) -> str:
                      f'<div class="half" style="border-radius:0 7px 7px 0;border-left:1px solid {BG}">{rh}</div>'
                      f'<span style="text-align:right;color:{col}">{flame}{abs(b["edge"]):,.1f}</span></div>')
         basis = "actual points" if c["board_basis"] == "actual" else "projected points"
+        legend = (f'<div class="lbl" style="margin-bottom:6px;font-weight:500"><span style="color:{AW["color"]}">&#9664; {_e(AW["name"])}</span>'
+                  f'<span style="color:{HM["color"]}">{_e(HM["name"])} &#9654;</span></div>')
         board = (f'<div class="sec"><div class="lbl"><span>Position edge &middot; {basis}</span>'
-                 f'<span>&#9733; biggest swing</span></div>{rows}</div>')
+                 f'<span>&#9733; biggest swing</span></div>{legend}{rows}</div>')
 
     s = c["series"]
     if s["meetings"]:
@@ -441,4 +446,38 @@ def card_html(c) -> str:
 
     top = (f'<div class="top"><span>{_e(c["league_name"])} &middot; Week {c["week"]}{" recap" if final else ""}</span>'
            f'<span>{pills}</span></div>')
-    return f'<style>{CSS}</style><div class="mc">{top}{hero}{wp}{board}{tape}{bench}{players}{take}</div>'
+    return {"top": top, "hero": hero, "wp": wp, "board": board, "tape": tape, "bench": bench, "players": players, "take": take}
+
+
+def card_html(c) -> str:
+    """The whole card, one tall block (the review page)."""
+    x = _sections(c)
+    return f'<style>{CSS}</style><div class="mc">{x["top"]}{x["hero"]}{x["wp"]}{x["board"]}{x["tape"]}{x["bench"]}{x["players"]}{x["take"]}</div>'
+
+
+# ---------------------------------------------------------------------------------------------------- panels --
+# Discord shows an attachment inside roughly a 550 x 400 box, so a tall image displays tiny (the one-piece card was ~250 px
+# wide there). The post therefore uses two LANDSCAPE panels, set larger, and puts the commentary in the message text.
+PANELS = ("cover", "board")
+PANEL_CSS = """
+.mc.panel{max-width:none;width:560px;zoom:1.25}
+.mc.panel .hero{min-height:230px}
+.mc.panel .side{padding:20px 18px 14px}
+.mc.panel .big{font-size:50px}
+.mc.panel .wm{width:300px;height:300px;margin-top:-150px}
+"""
+
+
+def panel_html(c, which) -> str:
+    """One landscape panel. cover = header, the two teams and the result (or the projection edge), tale of the tape;
+    board = the position board plus the bench strip (FINAL) or the players to watch (not final)."""
+    if which not in PANELS:
+        raise ValueError(f"unknown panel {which!r}")
+    x = _sections(c)
+    if which == "cover":
+        body = f'{x["top"]}{x["hero"]}{x["wp"]}{x["tape"]}'
+    else:
+        body = f'{x["top"]}{x["board"]}{x["bench"] if c["state"] == "FINAL" else x["players"]}'
+        if not (x["board"] or x["bench"] or x["players"]):
+            body += '<div class="sec"><div class="lbl"><span>No projection was captured before kickoff for this week.</span></div></div>'
+    return f'<style>{CSS}{PANEL_CSS}</style><div class="mc panel">{body}<div style="height:14px"></div></div>'
