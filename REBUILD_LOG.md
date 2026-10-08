@@ -769,3 +769,9 @@ First weekly run after week 4 failed three times, each a source fact; run 3 ende
 - Efficiency is defined here as points for / best-possible-lineup points over the same games; not yet checked against the power rankings page's own figure (Denver 89.50%).
 - Gate: 473 tests OK. `fdb rebuild` x2 NOT re-run after schema 036 (the mart is rebuilt by the builder); do it before the next phase. Snapshot: `database/pre_pf_per_game_20261008.db`.
 - Posted to the test channel: week 3 recap, week 5 preview (corrected version after the user deleted the first).
+
+### Phase 11 addendum 2 (2026-10-08): current record on recaps, the Wednesday choice, `--game`
+- Schema 037 adds `*_cur_w/l/t/pf/opt_pf` to `mart_matchup_card`: through the card's OWN week for a FINAL card, equal to the "before" columns otherwise. The card reader shows them on a recap ("after this week"); the picker still reads the "before" columns, so a game is ranked as it was picked.
+- `fdb choices [--n 5] [--include HOME:AWAY ...]` (`fdb/matchup_choices.py`): the picker's top games with pros and cons, each a plain statement of a number the picker or card already uses; written to `data/cards/<league>_<season>_wk<NN>_choices.md`. The weekly job writes the same file after the builders and adds a note to its report (never a post; a failure is only a note).
+- `fdb post --game HOME:AWAY` (either id order) posts that game instead of the picker's top one; the card is the Matchup of the Week and drops the picker's reasoning paragraph. A game not in the week is refused before anything is rendered or sent.
+- Tests: `tests/test_matchup_choices.py` (9); suite 482 OK. `fdb rebuild` x2 still NOT re-run after schemas 036 and 037.

@@ -155,6 +155,11 @@ def card(conn, league, season, week, home, away):
                       "pf": r[f"{k}_pf"], "opt_pf": r[f"{k}_opt_pf"], "conference": r[f"{k}_conference"], "score": r[f"{k}_score"], "opt": r[f"{k}_opt_pts"], "proj": r[f"{k}_proj"],
                       "proj_missing": r[f"{k}_proj_missing"]}
     H, A = side("home"), side("away")
+    if final:   # a recap says where each team stands NOW (after this week), not before the game
+        for k, d in (("home", H), ("away", A)):
+            if r[f"{k}_cur_w"] is not None:
+                d["w"], d["l"], d["t"] = r[f"{k}_cur_w"], r[f"{k}_cur_l"], r[f"{k}_cur_t"]
+                d["pf"], d["opt_pf"] = r[f"{k}_cur_pf"], r[f"{k}_cur_opt_pf"]
     hc, ac = pick_colors(r["home_color"], r["home_color_alt"], r["away_color"], r["away_color_alt"])
     H["color"], A["color"] = hc, ac
     notes = []
@@ -349,7 +354,7 @@ def _sections(c) -> dict:
                 sub = "Tied" if c["winner"] == "tie" else ""
             else:
                 sub = f'Won by {c["margin"]:,.2f}' if c["winner"] == who else f'Lost by {c["margin"]:,.2f}'
-            sub2, cap = f'{rec(s["w"], s["l"], s["t"])} before this week', "Final"
+            sub2, cap = f'{rec(s["w"], s["l"], s["t"])} after this week', "Final"
         else:
             big = f'{s["proj"]:,.2f}' if s["proj"] is not None else "-"
             sub = f'{rec(s["w"], s["l"], s["t"])} · {s["w"] + s["l"] + s["t"]} games played'
@@ -410,7 +415,7 @@ def _sections(c) -> dict:
         line, lastline = "First regular-season meeting", ""
     line, lastline = _e(line), _e(lastline)
     effic = lambda s_: f'{s_["pf"] / s_["opt_pf"] * 100:.2f}%' if s_.get("opt_pf") else "-"
-    tape = (f'<div class="sec"><div class="lbl"><span>Tale of the tape</span><span>before this week</span></div><div class="tape">'
+    tape = (f'<div class="sec"><div class="lbl"><span>Tale of the tape</span><span>{"after this week" if final else "before this week"}</span></div><div class="tape">'
             f'<div class="chip">{_e(AW["name"])} record<b style="color:{AW["color"]}">{_e(rec(AW["w"], AW["l"], AW["t"]))}</b></div>'
             f'<div class="chip">{_e(HM["name"])} record<b style="color:{HM["color"]}">{_e(rec(HM["w"], HM["l"], HM["t"]))}</b></div>'
             f'<div class="chip">Points for, season total<b style="font-size:13px"><span style="color:{AW["color"]}">{AW["pf"]:,.2f}</span> vs '

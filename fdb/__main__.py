@@ -125,7 +125,24 @@ def cmd_post(a):
     conn = _conn()
     try:
         return discord_post.run(conn, a.mode, a.league, send_it=a.send, yes=a.yes, repost=a.repost,
-                                ignore_weekly_status=a.ignore_weekly_status, allow_no_projection=a.allow_no_projection)
+                                ignore_weekly_status=a.ignore_weekly_status, allow_no_projection=a.allow_no_projection,
+                                game=a.game)
+    finally:
+        conn.close()
+
+
+def cmd_choices(a):
+    from . import matchup_choices
+    pairs = []
+    for g in a.include or []:
+        pair = matchup_choices.parse_pair(g)
+        if pair is None:
+            print(f"choices: --include wants two franchise ids like 0024:0023, got {g!r}")
+            return 1
+        pairs.append(pair)
+    conn = _conn()
+    try:
+        return matchup_choices.run(conn, a.league, n=a.n, include=pairs)
     finally:
         conn.close()
 
@@ -193,8 +210,16 @@ def main(argv=None):
     s.add_argument("--yes", action="store_true", help="skip the confirmation prompt (with --send)")
     s.add_argument("--repost", action="store_true", help="post again for a week already posted (or one whose attempt never finished)")
     s.add_argument("--ignore-weekly-status", action="store_true", help="post even though the last weekly run failed or is stale")
+    s.add_argument("--game", help="post this game instead of the picker's top one, as two franchise ids (0024:0023, either order); "
+                   "see `fdb choices`")
     s.add_argument("--allow-no-projection", action="store_true", help="post a preview that has no pre-kickoff projection")
     s.set_defaults(fn=cmd_post)
+    s = sub.add_parser("choices", help="the Wednesday choice: the picker's best games for the next week with pros and cons, "
+                       "written to data/cards/. Read only")
+    s.add_argument("--league", default="30590")
+    s.add_argument("--n", type=int, default=5, help="how many of the picker's top games to list")
+    s.add_argument("--include", action="append", help="also list this game, as two franchise ids (0024:0023); repeatable")
+    s.set_defaults(fn=cmd_choices)
     s = sub.add_parser("alerts", help="status changes for MY rostered players (Phase 12). Dry run by default: no network, "
                        "no writes, nothing sent")
     s.add_argument("--refresh", action="store_true", help="re-fetch the NFL and MFL injury feeds first (network reads)")

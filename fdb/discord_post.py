@@ -227,7 +227,8 @@ def weekly_status(now=None):
 
 # ------------------------------------------------------------------------- run --
 def run(conn, mode: str, league: str = "30590", send_it: bool = False, yes: bool = False, repost: bool = False,
-        ignore_weekly_status: bool = False, allow_no_projection: bool = False, ask=input) -> int:
+        ignore_weekly_status: bool = False, allow_no_projection: bool = False, ask=input,
+        game: str | None = None) -> int:
     """The `fdb post` command. -> exit code (0 = done or a clean dry run, 1 = refused or failed). Prints what it did."""
     say = print
     if league not in LEAGUES:
@@ -246,10 +247,24 @@ def run(conn, mode: str, league: str = "30590", send_it: bool = False, yes: bool
         say(f"post: {why}. Re-run with --ignore-weekly-status if you have checked the data yourself")
         return 1
     f = target["featured"]
+    if game:   # a person chose the game: it must be one of this week's games in this league; the picker's top game is not used
+        from . import matchup_choices
+        pair = matchup_choices.parse_pair(game)
+        rows = conn.execute("SELECT home_id, away_id FROM mart_matchup_card WHERE league_id = ? AND season = ? AND week = ?",
+                            (league, target["season"], target["week"])).fetchall()
+        hit = next((r for r in rows if pair and {r["home_id"], r["away_id"]} == set(pair)), None)
+        if hit is None:
+            say(f"post: --game {game!r} is not a game in week {target['week']} (use two franchise ids like 0024:0023; see `fdb choices`)")
+            return 1
+        f = {"home_id": hit["home_id"], "away_id": hit["away_id"]}
     card = mc.card(conn, league, target["season"], target["week"], f["home_id"], f["away_id"])
     if card is None:
         say("post: the featured game is no longer in the mart")
         return 1
+    if game:    # chosen by hand: it is the Matchup of the Week, and the picker's reasoning is not part of the post
+        card["featured"], card["pick"] = True, None
+        say(f"post: game chosen by hand ({game}); the picker's own top game was {target['featured']['home_id']}:{target['featured']['away_id']}"
+            if target.get("featured") else f"post: game chosen by hand ({game})")
     try:
         panels = card_render.render_panels(card)
     except card_render.RenderError as e:

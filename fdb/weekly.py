@@ -124,6 +124,14 @@ def run() -> int:
         _write_status(st)
         rc = rc or step["rc"]
 
+    try:   # the Wednesday choice for the Matchup of the Week preview: a file to read, never a post; a failure here is only a note
+        from . import matchup_choices
+        made = matchup_choices.write(conn)
+        if made:
+            notes.append(f"Week {made[1]} Matchup of the Week choices (pros and cons) are in {made[0]}")
+    except Exception as e:
+        notes.append(f"Matchup of the Week choices were not written: {type(e).__name__}: {e}")
+
     season = schedule.current_season(conn)
     if season:  # cross-source agreement on the live season: a silently wrong load shows up here
         from . import reconcile
