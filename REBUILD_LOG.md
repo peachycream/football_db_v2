@@ -775,3 +775,6 @@ First weekly run after week 4 failed three times, each a source fact; run 3 ende
 - `fdb choices [--n 5] [--include HOME:AWAY ...]` (`fdb/matchup_choices.py`): the picker's top games with pros and cons, each a plain statement of a number the picker or card already uses; written to `data/cards/<league>_<season>_wk<NN>_choices.md`. The weekly job writes the same file after the builders and adds a note to its report (never a post; a failure is only a note).
 - `fdb post --game HOME:AWAY` (either id order) posts that game instead of the picker's top one; the card is the Matchup of the Week and drops the picker's reasoning paragraph. A game not in the week is refused before anything is rendered or sent.
 - Tests: `tests/test_matchup_choices.py` (9); suite 482 OK. `fdb rebuild` x2 still NOT re-run after schemas 036 and 037.
+
+### Gate after schemas 036 and 037 (2026-10-08)
+`fdb rebuild` x2 -> identical content hash `c634c88e24f90633b40a52ec3d4ef3301e9fa3809d493327d40291e3b9d83aa8`, 0 network calls (supersedes the earlier "NOT re-run" notes). Snapshot first: `database/pre_pf_per_game_20261008.db`. The rebuild exported `app_state/app_post_log.csv` with today's three posts (week 3 recap is older; today: week 5 preview Denver at Cincinnati (deleted by hand in Discord), week 5 preview Washington at Carolina, week 4 recap).
