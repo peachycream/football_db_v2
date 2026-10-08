@@ -152,7 +152,7 @@ def card(conn, league, season, week, home, away):
     final = r["state"] == "FINAL"
     side = lambda k: {"id": r[f"{k}_id"], "name": r[f"{k}_name"] or r[f"{k}_id"], "abbrev": r[f"{k}_abbrev"] or r[f"{k}_id"],
                       "division": r[f"{k}_division"], "logo": r[f"{k}_logo"], "w": r[f"{k}_w"], "l": r[f"{k}_l"], "t": r[f"{k}_t"],
-                      "pf": r[f"{k}_pf"], "score": r[f"{k}_score"], "opt": r[f"{k}_opt_pts"], "proj": r[f"{k}_proj"],
+                      "pf": r[f"{k}_pf"], "opt_pf": r[f"{k}_opt_pf"], "conference": r[f"{k}_conference"], "score": r[f"{k}_score"], "opt": r[f"{k}_opt_pts"], "proj": r[f"{k}_proj"],
                       "proj_missing": r[f"{k}_proj_missing"]}
     H, A = side("home"), side("away")
     hc, ac = pick_colors(r["home_color"], r["home_color_alt"], r["away_color"], r["away_color_alt"])
@@ -240,7 +240,7 @@ def takeaways(c):
     if b:
         top = max(b, key=lambda x: abs(x["edge"]))
         who = H if top["edge"] > 0 else A
-        out.append(("flame", f"Biggest edge: {who['name']} at {top['grp']}, {abs(top['edge']):,.1f} "
+        out.append(("flame", f"Biggest edge: {who['name']} at {top['grp']}, {abs(top['edge']):,.2f} "
                              f"{'points' if c['board_basis'] == 'actual' else 'projected points'}."))
         wins = {"home": [x for x in b if x["edge"] > 0], "away": [x for x in b if x["edge"] < 0]}
         lead = max(wins, key=lambda k: (len(wins[k]), sum(abs(x["edge"]) for x in wins[k])))
@@ -248,15 +248,15 @@ def takeaways(c):
         best = sorted(wins[lead], key=lambda x: -abs(x["edge"]))[:3]
         if best:
             out.append(("bolt", f"{s['name']} leads {len(wins[lead])} of {len(b)} position groups: "
-                                + ", ".join(f"{x['grp']} +{abs(x['edge']):,.1f}" for x in best) + "."))
+                                + ", ".join(f"{x['grp']} +{abs(x['edge']):,.2f}" for x in best) + "."))
     if c["state"] == "FINAL" and c["margin"] is not None:
         win = H if c["winner"] == "home" else A if c["winner"] == "away" else None
         left = sum((s["opt"] - s["score"]) for s in (H, A) if s["opt"] is not None and s["score"] is not None)
         out.append(("scale", (f"{win['name']} won by {c['margin']:,.2f}. " if win else "Tied. ")
-                    + f"Between them {left:,.1f} points stayed on the bench."))
+                    + f"Between them {left:,.2f} points stayed on the bench."))
     elif H["proj"] is not None and A["proj"] is not None:
         gap, tot = abs(H["proj"] - A["proj"]), H["proj"] + A["proj"]
-        out.append(("scale", f"Projected gap is {gap:,.1f} points on about {tot / 2:,.0f} each"
+        out.append(("scale", f"Projected gap is {gap:,.2f} points on about {tot / 2:,.0f} each"
                              + (". Close enough that lineup calls decide it." if gap < 0.08 * tot / 2 else ".")))
     return out[:3]
 
@@ -284,6 +284,7 @@ CSS = """
 .mc .half{height:14px;background:#161d30;position:relative}
 .mc .fill{position:absolute;top:0;bottom:0}
 .mc .tape{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.mc .tape .wide{grid-column:1/-1}
 .mc .tape3{grid-template-columns:repeat(3,minmax(0,1fr))}
 .mc .chip{background:#141b2e;border-radius:10px;padding:10px;font-size:12px;color:#8e98b3}
 .mc .chip b{display:block;font-weight:500;font-size:15px;color:#eef1f7;margin-top:4px}
@@ -350,7 +351,7 @@ def _sections(c) -> dict:
                 sub = f'Won by {c["margin"]:,.2f}' if c["winner"] == who else f'Lost by {c["margin"]:,.2f}'
             sub2, cap = f'{rec(s["w"], s["l"], s["t"])} before this week', "Final"
         else:
-            big = f'{s["proj"]:,.1f}' if s["proj"] is not None else "-"
+            big = f'{s["proj"]:,.2f}' if s["proj"] is not None else "-"
             sub = f'{rec(s["w"], s["l"], s["t"])} · {s["w"] + s["l"] + s["t"]} games played'
             sub2, cap = "", ("Projected" if s["proj"] is not None else "No pre-kickoff projection")
         line = lambda t: f'<div class="sub" style="color:{txt}">{_e(t)}</div>' if t else ""
@@ -386,7 +387,7 @@ def _sections(c) -> dict:
             rows += (f'<div class="row"><span style="font-weight:500">{b["grp"]}</span>'
                      f'<div class="half" style="border-radius:7px 0 0 7px">{lh}</div>'
                      f'<div class="half" style="border-radius:0 7px 7px 0;border-left:1px solid {BG}">{rh}</div>'
-                     f'<span style="text-align:right;color:{col}">{flame}{abs(b["edge"]):,.1f}</span></div>')
+                     f'<span style="text-align:right;color:{col}">{flame}{abs(b["edge"]):,.2f}</span></div>')
         basis = "actual points" if c["board_basis"] == "actual" else "projected points"
         legend = (f'<div class="lbl" style="margin-bottom:6px;font-weight:500"><span style="color:{AW["color"]}">&#9664; {_e(AW["name"])}</span>'
                   f'<span style="color:{HM["color"]}">{_e(HM["name"])} &#9654;</span></div>')
@@ -408,22 +409,25 @@ def _sections(c) -> dict:
     else:
         line, lastline = "First regular-season meeting", ""
     line, lastline = _e(line), _e(lastline)
+    effic = lambda s_: f'{s_["pf"] / s_["opt_pf"] * 100:.2f}%' if s_.get("opt_pf") else "-"
     tape = (f'<div class="sec"><div class="lbl"><span>Tale of the tape</span><span>before this week</span></div><div class="tape">'
             f'<div class="chip">{_e(AW["name"])} record<b style="color:{AW["color"]}">{_e(rec(AW["w"], AW["l"], AW["t"]))}</b></div>'
             f'<div class="chip">{_e(HM["name"])} record<b style="color:{HM["color"]}">{_e(rec(HM["w"], HM["l"], HM["t"]))}</b></div>'
-            f'<div class="chip">Points for, season total<b style="font-size:13px"><span style="color:{AW["color"]}">{AW["pf"]:,.0f}</span> vs '
-            f'<span style="color:{HM["color"]}">{HM["pf"]:,.0f}</span></b></div>'
-            f'<div class="chip">All-time series<b style="font-size:13px">{line}</b></div></div>'
+            f'<div class="chip">Points for, season total<b style="font-size:13px"><span style="color:{AW["color"]}">{AW["pf"]:,.2f}</span> vs '
+            f'<span style="color:{HM["color"]}">{HM["pf"]:,.2f}</span></b></div>'
+            f'<div class="chip">Lineup efficiency<b style="font-size:13px"><span style="color:{AW["color"]}">{effic(AW)}</span> vs '
+            f'<span style="color:{HM["color"]}">{effic(HM)}</span></b></div>'
+            f'<div class="chip wide">All-time series<b style="font-size:13px">{line}</b></div></div>'
             + (f'<div class="muted">{lastline}</div>' if lastline else "") + '</div>')
 
     bench = ""
     if final and AW["opt"] is not None and HM["opt"] is not None and AW["score"] is not None and HM["score"] is not None:
         sh = lambda s_: (s_["score"] / s_["opt"] * 100) if s_["opt"] else 0.0
         bench = (f'<div class="sec"><div class="lbl"><span>Left on the bench</span></div><div class="tape tape3">'
-                 f'<div class="chip">Best possible lineup<b style="font-size:14px"><span style="color:{AW["color"]}">{AW["opt"]:,.1f}</span> vs '
-                 f'<span style="color:{HM["color"]}">{HM["opt"]:,.1f}</span></b></div>'
-                 f'<div class="chip">Bench points left<b style="font-size:14px"><span style="color:{AW["color"]}">{AW["opt"] - AW["score"]:,.1f}</span> vs '
-                 f'<span style="color:{HM["color"]}">{HM["opt"] - HM["score"]:,.1f}</span></b></div>'
+                 f'<div class="chip">Best possible lineup<b style="font-size:14px"><span style="color:{AW["color"]}">{AW["opt"]:,.2f}</span> vs '
+                 f'<span style="color:{HM["color"]}">{HM["opt"]:,.2f}</span></b></div>'
+                 f'<div class="chip">Bench points left<b style="font-size:14px"><span style="color:{AW["color"]}">{AW["opt"] - AW["score"]:,.2f}</span> vs '
+                 f'<span style="color:{HM["color"]}">{HM["opt"] - HM["score"]:,.2f}</span></b></div>'
                  f'<div class="chip">Share of best lineup<b style="font-size:14px"><span style="color:{AW["color"]}">{sh(AW):.1f}%</span> vs '
                  f'<span style="color:{HM["color"]}">{sh(HM):.1f}%</span></b></div></div></div>')
 
@@ -433,7 +437,7 @@ def _sections(c) -> dict:
             rows = "".join(
                 f'<div class="pr"><span class="av" style="background:{s_["color"]};color:#0d1220">{_e(_initials(p["name"]))}</span>'
                 f'<span style="flex:1">{_e(p["name"])} <span style="color:#8e98b3">{_e(p["position"])}</span></span>'
-                f'<span>{p["value"]:,.1f}</span></div>' for p in c["players"][who])
+                f'<span>{p["value"]:,.2f}</span></div>' for p in c["players"][who])
             return f'<div>{rows}</div>'
         title = "Top performers" if c["players_basis"] == "actual" else "Players to watch"
         sub = "Actual points" if c["players_basis"] == "actual" else "Projected points"

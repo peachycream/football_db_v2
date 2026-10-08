@@ -59,31 +59,31 @@ class Recap(unittest.TestCase):
     def test_how_it_was_won_uses_the_position_board(self):
         with MartEnv() as env:
             t = lead_text(cm.recap_paragraphs(env.c, self.card(env)))["How it was won"]
-            self.assertIn("A won 1 of 2 position groups, led by QB (+100.0).", t)
-            self.assertIn("B led LB by 90.0.", t)
+            self.assertIn("A won 1 of 2 position groups, led by QB (+100.00).", t)
+            self.assertIn("B led LB by 90.00.", t)
 
     def test_the_stars_come_from_the_lineups(self):
         with MartEnv() as env:
             t = lead_text(cm.recap_paragraphs(env.c, self.card(env)))["The stars"]
-            self.assertIn("Player 0001 (QB) led A with 100.0, 100.0% of the team's total", t)
-            self.assertIn("Player 0002 (MLB) led B with 90.0", t)
-            self.assertIn("best single score of the game was Player 0001's 100.0", t)
+            self.assertIn("Player 0001 (QB) led A with 100.00, 100.0% of the team's total", t)
+            self.assertIn("Player 0002 (MLB) led B with 90.00", t)
+            self.assertIn("best single score of the game was Player 0001's 100.00", t)
 
     def test_the_bench_counts_points_left_names_the_best_sitters_and_does_the_what_if(self):
         with MartEnv() as env:
             t = lead_text(cm.recap_paragraphs(env.c, self.card(env)))["The bench"]
-            self.assertIn("B left 5.0 points on the bench (best possible lineup 95.0, 94.7% captured)", t)
-            self.assertIn("A left 5.0 (105.0, 95.2%)", t)
+            self.assertIn("B left 5.00 points on the bench (best possible lineup 95.00, 94.7% captured)", t)
+            self.assertIn("A left 5.00 (105.00, 95.2%)", t)
             self.assertIn("MFL 00022", t)                                       # an unresolved id is shown by its MFL id, never guessed
-            self.assertIn("(3.0)", t)
-            self.assertIn("Even a perfect lineup (95.0) would not have changed the result.", t)
+            self.assertIn("(3.00)", t)
+            self.assertIn("Even a perfect lineup (95.00) would not have changed the result.", t)
 
     def test_a_loser_whose_perfect_lineup_would_have_won_is_told_so(self):
         with MartEnv() as env:
             c = self.card(env)
             c["away"]["opt"] = 140.0      # B's best possible lineup beats A's 100
             t = lead_text(cm.recap_paragraphs(env.c, c))["The bench"]
-            self.assertIn("With a perfect lineup B would have won (140.0 to 100.00).", t)
+            self.assertIn("With a perfect lineup B would have won (140.00 to 100.00).", t)
 
     def test_the_series_after_the_game_and_the_previous_meeting(self):
         with MartEnv() as env:
@@ -155,10 +155,10 @@ class Preview(unittest.TestCase):
             c = mc.card(env.c, L, 2026, 3, "0001", "0002")
             t = lead_text(cm.preview_paragraphs(env.c, c))
             self.assertIn("B (0-", t["The matchup"] + "B (0-")                  # records are shown
-            self.assertIn("The projections have A ahead by 5.0 points (20.0 to 15.0)", t["The matchup"])
+            self.assertIn("The projections have A ahead by 5.00 points (20.00 to 15.00)", t["The matchup"])
             self.assertIn("It is a division game.", t["The matchup"])
-            self.assertIn("A lead QB (+20.0)", t["Position battles"])
-            self.assertIn("B lead LB (+15.0)", t["Position battles"])
+            self.assertIn("A lead QB (+20.00)", t["Position battles"])
+            self.assertIn("B lead LB (+15.00)", t["Position battles"])
             self.assertIn("Players to watch", t)
             self.assertIn("The series", t)
 
@@ -173,10 +173,27 @@ class Preview(unittest.TestCase):
             self.assertIn("projected totals are only", t["Why this game"])
             self.assertIn("by record", t["The stakes"])
             self.assertIn("points for", t["The stakes"])
+            self.assertIn("lineup efficiency of", t["The stakes"])
+            self.assertRegex(t["The stakes"], r"\(\w+ for \d+\w\w of \d+ in the \w+ by record\)|\(\d+\w\w of \d+ in the \w+ by record\)")
+            self.assertRegex(t["The stakes"], r"\d+\.\d\d% \(")                    # efficiency to two decimals
             self.assertIn("The biggest gap is", t["Position battles"])
             second = mc.games(env.c, L, 2026, 3)[1]
             c2 = mc.card(env.c, L, 2026, 3, second["home_id"], second["away_id"])
             self.assertNotIn("Why this game", lead_text(cm.preview_paragraphs(env.c, c2)))   # only the featured game is explained
+
+    def test_the_projected_totals_are_always_written_favourite_first(self):
+        """Found reading the real week-5 preview: 'Denver ahead by 18.3 (1,371.1 to 1,389.5)' put the home total first, so it read
+        as if the favourite had the smaller number."""
+        with MartEnv() as env:
+            env.seed_all()
+            env.build(now=BEFORE_KICKOFF)
+            c = mc.card(env.c, L, 2026, 3, "0001", "0002")        # home A, away B
+            c["home"]["proj"], c["away"]["proj"] = 1371.1, 1389.5   # the AWAY team is the favourite
+            t = lead_text(cm.preview_paragraphs(env.c, c))["The matchup"]
+            self.assertIn("have B ahead by 18.40 points (1,389.50 to 1,371.10)", t)
+            c["home"]["proj"], c["away"]["proj"] = 1389.5, 1371.1   # now the HOME team is
+            t = lead_text(cm.preview_paragraphs(env.c, c))["The matchup"]
+            self.assertIn("have A ahead by 18.40 points (1,389.50 to 1,371.10)", t)
 
     def test_rank_text_names_ties(self):
         self.assertEqual(cm._rank_text(5.0, [9.0, 5.0, 5.0, 1.0]), "tied for 2nd")

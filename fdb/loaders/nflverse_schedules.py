@@ -1,18 +1,25 @@
 """nflverse schedules -> core_schedule.
 
-One file (release asset schedules/games.csv) holds every season from 1999, so
+One file (release asset schedules/games.csv.gz) holds every season from 1999, so
 there is a single raw partition, 'all', and one load scope per season.
+
+SOURCE CHANGE, found 2026-10-07 when the Wednesday weekly run failed with HTTP 404: nflverse removed the plain
+`games.csv` asset from this release (it now ships games.csv.gz, games.parquet and games.qs; the gz was updated
+2026-10-06). The raw file is stored AS RECEIVED (gzip), and parse() reads gzip or plain CSV by its magic bytes, so
+raw files fetched before the change still replay in `fdb rebuild`.
 
 The schedule is a CURRENT-STATE feed: scores and kickoff times change while a
 season is open, and next season's schedule appears in May. It is therefore
 never marked final and is re-fetched on every run (it is ~2 MB)."""
 import csv
+import gzip
 import io
 
 from .. import http, schedule
 from ..loader import Loader, Scope
 
-URL = "https://github.com/nflverse/nflverse-data/releases/download/schedules/games.csv"
+URL = "https://github.com/nflverse/nflverse-data/releases/download/schedules/games.csv.gz"
+GZIP_MAGIC = bytes([0x1F, 0x8B])
 POST_TYPES = {"WC", "DIV", "CON", "SB"}
 
 # Real-world exceptions to the regular-season shape, each with a reason. A check
@@ -28,7 +35,7 @@ class ScheduleLoader(Loader):
     endpoint = "schedules"
     table = "core_schedule"
     grain = "reference"
-    ext = "csv"
+    ext = "csv.gz"
 
     def partition(self, scope: Scope) -> str:
         return "all"
@@ -37,6 +44,8 @@ class ScheduleLoader(Loader):
         return http.get(URL), {"url": URL}
 
     def parse(self, payload: bytes):
+        if payload[:2] == GZIP_MAGIC:   # the current asset; raw files from before 2026-10-07 are plain CSV
+            payload = gzip.decompress(payload)
         reader = csv.DictReader(io.StringIO(payload.decode("utf-8-sig")))
         rows = list(reader)
         return list(reader.fieldnames or []), rows

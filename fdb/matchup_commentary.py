@@ -102,10 +102,10 @@ def recap_paragraphs(conn, card) -> list:
         theirs = sorted((b for b in board if b["edge"] * sign < 0), key=lambda b: -abs(b["edge"]))
         t = f"{W['name']} won {len(mine)} of {len(board)} position groups"
         if mine:
-            t += ", led by " + ", ".join(f"{b['grp']} (+{abs(b['edge']):,.1f})" for b in mine[:3])
+            t += ", led by " + ", ".join(f"{b['grp']} (+{abs(b['edge']):,.2f})" for b in mine[:3])
         t += "."
         if theirs:
-            t += f" {L['name']} led " + " and ".join(f"{b['grp']} by {abs(b['edge']):,.1f}" for b in theirs[:2]) + "."
+            t += f" {L['name']} led " + " and ".join(f"{b['grp']} by {abs(b['edge']):,.2f}" for b in theirs[:2]) + "."
         out.append({"lead": "How it was won", "text": t})
     # 3. the stars
     pl = card["players"]
@@ -114,34 +114,34 @@ def recap_paragraphs(conn, card) -> list:
         for s_, who in ((A, "away"), (H, "home")):
             if pl[who]:
                 p = pl[who][0]
-                bits.append(f"{p['name']} ({p['position']}) led {s_['name']} with {p['value']:,.1f}, {_pct(p['value'], s_['score'])} of the team's total")
+                bits.append(f"{p['name']} ({p['position']}) led {s_['name']} with {p['value']:,.2f}, {_pct(p['value'], s_['score'])} of the team's total")
         allp = [(p["value"], p["name"]) for who in ("home", "away") for p in pl[who]]
         t = "; ".join(bits) + "."
-        deeper = [f"{s_['name']}: " + ", ".join(f"{p['name']} {p['value']:,.1f}" for p in pl[who][1:3])
+        deeper = [f"{s_['name']}: " + ", ".join(f"{p['name']} {p['value']:,.2f}" for p in pl[who][1:3])
                   for s_, who in ((A, "away"), (H, "home")) if len(pl[who]) > 1]
         if deeper:
             t += " Next best: " + "; ".join(deeper) + "."
         if allp:
-            t += f" The best single score of the game was {max(allp)[1]}'s {max(allp)[0]:,.1f}."
+            t += f" The best single score of the game was {max(allp)[1]}'s {max(allp)[0]:,.2f}."
         out.append({"lead": "The stars", "text": t})
     # 4. the bench
     if all(s_["opt"] is not None for s_ in (H, A)):
         left = {"home": H["opt"] - H["score"], "away": A["opt"] - A["score"]}
-        t = (f"{A['name']} left {left['away']:,.1f} points on the bench (best possible lineup {A['opt']:,.1f}, {_pct(A['score'], A['opt'])} captured); "
-             f"{H['name']} left {left['home']:,.1f} ({H['opt']:,.1f}, {_pct(H['score'], H['opt'])}).")
+        t = (f"{A['name']} left {left['away']:,.2f} points on the bench (best possible lineup {A['opt']:,.2f}, {_pct(A['score'], A['opt'])} captured); "
+             f"{H['name']} left {left['home']:,.2f} ({H['opt']:,.2f}, {_pct(H['score'], H['opt'])}).")
         sitters = []
         for s_, who in ((A, "away"), (H, "home")):
             b = card.get("bench", {}).get(who) or {}
             if b.get("score") is not None and b.get("name"):
-                sitters.append(f"{b['name']}{' (' + b['position'] + ')' if b.get('position') else ''} for {s_['name']} ({b['score']:,.1f})")
+                sitters.append(f"{b['name']}{' (' + b['position'] + ')' if b.get('position') else ''} for {s_['name']} ({b['score']:,.2f})")
         if sitters:
             t += " The best scorer on each bench: " + " and ".join(sitters) + "."
         if card["winner"] in ("home", "away"):
             W, L = (H, A) if card["winner"] == "home" else (A, H)
             if L["opt"] > W["score"]:
-                t += f" With a perfect lineup {L['name']} would have won ({L['opt']:,.1f} to {W['score']:,.2f})."
+                t += f" With a perfect lineup {L['name']} would have won ({L['opt']:,.2f} to {W['score']:,.2f})."
             else:
-                t += f" Even a perfect lineup ({L['opt']:,.1f}) would not have changed the result."
+                t += f" Even a perfect lineup ({L['opt']:,.2f}) would not have changed the result."
         out.append({"lead": "The bench", "text": t})
     # 5. the series
     sa = _series_after(card)
@@ -181,18 +181,25 @@ def _rank_text(value, order):
 
 
 def pre_context(conn, card) -> dict:
-    """Where every team in the league stands going into the week: win percentage and points for (a week's points once),
-    from the mart's completed-weeks figures. Empty when nobody has played yet."""
-    rows = conn.execute("""SELECT home_id, away_id, home_w, home_l, home_t, away_w, away_l, away_t, home_pf, away_pf FROM mart_matchup_card
-                           WHERE league_id = ? AND season = ? AND week = ?""", (card["league_id"], card["season"], card["week"])).fetchall()
+    """Where every team stands going into the week: win percentage, points for (every game counts, as in the league's own
+    standings) and lineup efficiency (points for / best-possible-lineup points over the same games), from the mart's
+    completed-weeks figures. Ranked inside the team's own conference when the mart knows it, else across the league.
+    Empty when nobody has played yet."""
+    rows = conn.execute("""SELECT * FROM mart_matchup_card WHERE league_id = ? AND season = ? AND week = ?""",
+                        (card["league_id"], card["season"], card["week"])).fetchall()
     team = {}
     for r in rows:
         for who in ("home", "away"):
             w, l, t = r[f"{who}_w"], r[f"{who}_l"], r[f"{who}_t"]
-            team[r[f"{who}_id"]] = ((w + 0.5 * t) / (w + l + t) if (w + l + t) else None, r[f"{who}_pf"], w + l + t)
-    played = [v for v in team.values() if v[2]]
-    return {"teams": len(team), "wp": sorted((v[0] for v in played), reverse=True), "pf": sorted((v[1] for v in played), reverse=True),
-            "by_team": team, "any_played": bool(played)}
+            opt = r[f"{who}_opt_pf"]
+            team[r[f"{who}_id"]] = {"wp": (w + 0.5 * t) / (w + l + t) if (w + l + t) else None, "pf": r[f"{who}_pf"], "n": w + l + t,
+                                    "eff": (r[f"{who}_pf"] / opt) if opt else None, "conf": r[f"{who}_conference"]}
+    played = {k: v for k, v in team.items() if v["n"]}
+
+    def pool(conf):
+        """the teams a team is compared with: its conference when known, else the whole league"""
+        return [v for v in played.values() if v["conf"] == conf] if conf else list(played.values())
+    return {"teams": len(team), "by_team": team, "any_played": bool(played), "pool": pool}
 
 
 def preview_paragraphs(conn, card) -> list:
@@ -208,7 +215,8 @@ def preview_paragraphs(conn, card) -> list:
     if H["proj"] is not None and A["proj"] is not None:
         gap = abs(H["proj"] - A["proj"])
         fav = H if H["proj"] > A["proj"] else A
-        t += f" The projections have {fav['name']} ahead by {gap:,.1f} points ({H['proj']:,.1f} to {A['proj']:,.1f})"
+        other = A if fav is H else H   # the favourite's total FIRST: "(1,389.5 to 1,371.1)" reads as favourite to underdog
+        t += f" The projections have {fav['name']} ahead by {gap:,.2f} points ({fav['proj']:,.2f} to {other['proj']:,.2f})"
         if card["win_prob"]:
             t += f", a {max(card['win_prob'].values()) * 100:.0f}% edge on v1's model"
         t += "."
@@ -222,18 +230,24 @@ def preview_paragraphs(conn, card) -> list:
               else f"The teams rate {qa:.2f} and {qh:.2f} on its 0-to-1 scale")
         if pk["closeness"] is not None and H["proj"] is not None and A["proj"] is not None:
             gap, total = abs(H["proj"] - A["proj"]), H["proj"] + A["proj"]
-            t += f", and their projected totals are only {gap:,.1f} points apart, {gap / total * 100:.1f}% of the combined {total:,.0f}"
+            t += f", and their projected totals are only {gap:,.2f} points apart, {gap / total * 100:.1f}% of the combined {total:,.2f}"
         out.append({"lead": "Why this game", "text": t + "."})
     # 3. the stakes: where both teams stand in the league
     ctx = pre_context(conn, card)
     if ctx["any_played"] and ctx["teams"] > 1:
         bits = []
         for s_ in (A, H):
-            wp, pf, n = ctx["by_team"].get(s_["id"], (None, 0.0, 0))
-            if n:
-                bits.append(f"{s_['name']} are {s_['w']}-{s_['l']}{'-' + str(s_['t']) if s_['t'] else ''} "
-                            f"({_rank_text(wp, ctx['wp'])} of {ctx['teams']} by record) with {pf:,.0f} points for "
-                            f"({_rank_text(pf, ctx['pf'])} in the league)")
+            me = ctx["by_team"].get(s_["id"])
+            if not me or not me["n"]:
+                continue
+            peers = ctx["pool"](me["conf"])
+            scope = f"the {me['conf']}" if me["conf"] else "the league"
+            rank = lambda key: _rank_text(me[key], sorted((v[key] for v in peers if v[key] is not None), reverse=True))
+            bit = (f"{s_['name']} are {s_['w']}-{s_['l']}{'-' + str(s_['t']) if s_['t'] else ''} "
+                   f"({rank('wp')} of {len(peers)} in {scope} by record) with {me['pf']:,.2f} points for ({rank('pf')} in {scope})")
+            if me["eff"] is not None:
+                bit += f" and a lineup efficiency of {me['eff'] * 100:.2f}% ({rank('eff')} in {scope})"
+            bits.append(bit)
         if bits:
             out.append({"lead": "The stakes", "text": "; ".join(bits) + "."})
     # 4. the position battles
@@ -243,17 +257,17 @@ def preview_paragraphs(conn, card) -> list:
         aways = sorted((b for b in board if b["edge"] < 0), key=lambda b: b["edge"])
         bits = []
         if homes:
-            bits.append(f"{H['name']} lead " + ", ".join(f"{b['grp']} (+{b['edge']:,.1f})" for b in homes[:3]))
+            bits.append(f"{H['name']} lead " + ", ".join(f"{b['grp']} (+{b['edge']:,.2f})" for b in homes[:3]))
         if aways:
-            bits.append(f"{A['name']} lead " + ", ".join(f"{b['grp']} (+{abs(b['edge']):,.1f})" for b in aways[:3]))
+            bits.append(f"{A['name']} lead " + ", ".join(f"{b['grp']} (+{abs(b['edge']):,.2f})" for b in aways[:3]))
         text = "; ".join(bits) + "."
         top = max(board, key=lambda b: abs(b["edge"]))
-        text += f" The biggest gap is {top['grp']}, where {(H if top['edge'] > 0 else A)['name']} lead by {abs(top['edge']):,.1f}."
+        text += f" The biggest gap is {top['grp']}, where {(H if top['edge'] > 0 else A)['name']} lead by {abs(top['edge']):,.2f}."
         out.append({"lead": "Position battles", "text": text})
     # 5. players to watch
     pl = card["players"]
     if card["players_basis"] == "projected" and (pl["home"] or pl["away"]):
-        bits = [f"{s_['name']}: " + ", ".join(f"{p['name']} ({p['position']}) {p['value']:,.1f}" for p in pl[who])
+        bits = [f"{s_['name']}: " + ", ".join(f"{p['name']} ({p['position']}) {p['value']:,.2f}" for p in pl[who])
                 for s_, who in ((A, "away"), (H, "home")) if pl[who]]
         out.append({"lead": "Players to watch", "text": "; ".join(bits) + "."})
     # 6. the series

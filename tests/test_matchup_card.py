@@ -72,13 +72,29 @@ class Final(unittest.TestCase):
             self.assertIsNone(w1["last_meeting_season"])
             self.assertEqual((w1["home_score"], w1["away_score"], w1["home_opt_pts"]), (100.0, 90.0, 105.0))
             w2 = env.card(2, "0001", "0002")
-            # 0001 won both week-1 games (100 v 90, 100 v 70) -> 2-0; 0002 lost to 0001, beat 0003 -> 1-1. A week's points once.
-            self.assertEqual((w2["home_w"], w2["home_l"], w2["home_pf"]), (2, 0, 100.0))
-            self.assertEqual((w2["away_w"], w2["away_l"], w2["away_pf"]), (1, 1, 90.0))
+            # 0001 won both week-1 games (100 v 90, 100 v 70) -> 2-0; 0002 lost to 0001, beat 0003 -> 1-1. Points for count every game.
+            self.assertEqual((w2["home_w"], w2["home_l"], w2["home_pf"]), (2, 0, 200.0))
+            self.assertEqual((w2["away_w"], w2["away_l"], w2["away_pf"]), (1, 1, 180.0))
             self.assertEqual((w2["series_meetings"], w2["series_home_wins"], w2["series_away_wins"]), (1, 1, 0))
             self.assertEqual((w2["last_meeting_season"], w2["last_meeting_week"], w2["last_meeting_home_score"],
                               w2["last_meeting_away_score"]), (2026, 1, 100.0, 90.0))
             self.assertEqual((w2["home_score"], w2["away_score"]), (60.0, 70.0))
+
+    def test_points_for_count_every_game_and_carry_the_best_lineup_total_and_the_conference(self):
+        """Found 2026-10-08: the card said Denver had 4,088 points for while the league's power rankings said 8,175.90 (8 games).
+        Points for are per GAME, like the record; opt_pf is the best-possible total over the same games."""
+        with MartEnv() as env:
+            env.seed_all()
+            env.build(now=BEFORE_KICKOFF)
+            w2 = env.card(2, "0001", "0002")
+            self.assertEqual((w2["home_pf"], w2["home_opt_pf"]), (200.0, 210.0))      # two week-1 games of 100, best lineup 105 each
+            conf = env.c.execute("""SELECT c.name FROM core_mfl_franchises f JOIN core_mfl_divisions d
+                                    ON d.season = f.season AND d.league_id = f.league_id AND d.id = f.division
+                                    JOIN core_mfl_conferences c ON c.season = d.season AND c.league_id = d.league_id AND c.id = d.conference
+                                    WHERE f.league_id = ? AND f.season = 2026 AND f.id = '0001'""", (L,)).fetchone()[0]
+            self.assertEqual(w2["home_conference"], conf)
+            w1 = env.card(1, "0001", "0002")
+            self.assertEqual((w1["home_pf"], w1["home_opt_pf"]), (0.0, None))           # nothing played before week 1
 
     def test_division_rivalry_and_names_and_colors(self):
         with MartEnv() as env:
@@ -128,7 +144,7 @@ class PreviewAndLive(unittest.TestCase):
             g = env.card(3, "0001", "0002")
             self.assertEqual((g["state"], g["lineup_source"]), ("PREVIEW", "upcoming_snapshot"))
             self.assertEqual((g["home_score"], g["away_score"], g["home_opt_pts"]), (None, None, None))   # no actuals before the games
-            self.assertEqual((g["home_w"], g["home_l"], g["home_pf"]), (2, 2, 160.0))                    # weeks 1-2, both games each
+            self.assertEqual((g["home_w"], g["home_l"], g["home_pf"]), (2, 2, 320.0))                    # weeks 1-2, both games each, every game counted
             self.assertEqual((g["series_meetings"], g["series_home_wins"], g["series_away_wins"]), (2, 1, 1))
             self.assertEqual((g["last_meeting_week"], g["last_meeting_home_score"], g["last_meeting_away_score"]), (2, 60.0, 70.0))
             self.assertEqual((g["home_proj"], g["away_proj"], g["home_proj_missing"]), (20.0, 15.0, 0))

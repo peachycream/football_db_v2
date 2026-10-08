@@ -757,3 +757,15 @@ In-game ESPN updates after kickoff also produce `change` pushes (in-game injury 
 Lineup awareness (MFL `core_mfl_upcoming_lineups`, Sleeper starters) so starters outrank bench; news/RSS; Task Scheduler registration (needs Turon's OK); Yahoo (OAuth) and CBS (Playwright) rosters; recalibrate the window on Thursday/Monday.
 
 **OPEN ITEMS (new):** (33) Turon: approve registering `alerts_watch.bat` (daily) and `alerts_midweek.bat` (hourly), after `NTFY_TOPIC` + `--seed`. (34) Recalibrate the 70-89 min inactive timing on a Thursday and a Monday game. (35) Decide whether post-kickoff ESPN changes should push or be muted.
+
+## Phase 11 addendum (2026-10-08): Wednesday run fixes and the week 5 card corrections
+
+First weekly run after week 4 failed three times, each a source fact; run 3 ended `ok` (59 steps). Started by hand (the laptop slept through 05:00), so the Phase 8 unattended-run gate is still open.
+- **Schedules:** nflverse removed `games.csv` (HTTP 404). The loader now fetches `games.csv.gz`, stores it as received, and reads gzip or plain by magic bytes so older raw files still replay.
+- **Injuries:** the 50-row floor no longer applies to the NEWEST regular-season week (its report is published gradually; week 5 had 19 rows on Wednesday). Earlier weeks and the ceiling are unchanged. One `tests/test_alerts.py` case changed so its short week is not the newest.
+- **Dashboard route tree:** FTN published ATL at NO plays but no route charting (week 4: 967 of 1,046 targets). The check now allows for FTN games with no route1 at all and reports them as `pending` in the builder result; a shortfall bigger than the uncharted share still fails.
+- **Preview wording:** the projected totals are written favourite first.
+- **Points for were halved on the card (found by the user, 4,088 vs the power rankings' 8,175.90).** The builder counted a week's score once; a franchise plays two games a week, and the record and the league's standings count both. `home_pf`/`away_pf` now sum every game. Schema 036 adds `*_opt_pf` (best possible lineup over the same games; lineup efficiency = pf / opt_pf is computed at read time) and `*_conference`. The preview ranks each team inside its own conference (league when unknown) and shows lineup efficiency; all points print to two decimals.
+- Efficiency is defined here as points for / best-possible-lineup points over the same games; not yet checked against the power rankings page's own figure (Denver 89.50%).
+- Gate: 473 tests OK. `fdb rebuild` x2 NOT re-run after schema 036 (the mart is rebuilt by the builder); do it before the next phase. Snapshot: `database/pre_pf_per_game_20261008.db`.
+- Posted to the test channel: week 3 recap, week 5 preview (corrected version after the user deleted the first).

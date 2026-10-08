@@ -30,7 +30,10 @@ class NflInjuriesLoader(CsvLoader):
     season_range = (2025, 2099)   # earlier files have another header; see the module docstring
     url_template = "https://github.com/nflverse/nflverse-data/releases/download/injuries/injuries_{season}.csv"
     ROWS_PER_WEEK = (50, 700)     # observed 2025: ~275 per REG week; bounds catch a truncated or duplicated file
-    # Playoff weeks have fewer teams (2025 POST: 44 and 20 rows), so only the ceiling applies to them.
+    # Playoff weeks have fewer teams (2025 POST: 44 and 20 rows), so only the ceiling applies to them. The NEWEST regular-season
+    # week in the file is also exempt from the floor: its report is published GRADUALLY from Wednesday (week 5 had 19 rows on the
+    # morning of 2026-10-07, which failed the weekly run), so a short newest week means "still being published". Every earlier
+    # week keeps the floor; the newest one gets it as soon as a later week appears.
 
     def partition(self, scope: Scope) -> str:
         return str(scope.season)
@@ -49,9 +52,11 @@ class NflInjuriesLoader(CsvLoader):
         lo, hi = self.ROWS_PER_WEEK
         odd = conn.execute("""SELECT season_type, week, COUNT(*) FROM core_nflverse_injuries WHERE season = ?
                               GROUP BY season_type, week
-                              HAVING COUNT(*) > ? OR (season_type = 'REG' AND COUNT(*) < ?)""", (s, hi, lo)).fetchall()
+                              HAVING COUNT(*) > ? OR (season_type = 'REG' AND COUNT(*) < ?
+                                     AND week < (SELECT MAX(week) FROM core_nflverse_injuries WHERE season = ? AND season_type = 'REG'))""",
+                           (s, hi, lo, s)).fetchall()
         if odd:
-            fails.append(f"{s}: weeks with implausible row counts (REG {lo}-{hi}, POST up to {hi}): {[tuple(o) for o in odd][:5]}")
+            fails.append(f"{s}: weeks with implausible row counts (REG {lo}-{hi}, POST up to {hi}; the newest REG week may be short): {[tuple(o) for o in odd][:5]}")
         # A status the alert engine has no wording for must stop the load, not pass as 'no designation'.
         for col, known in (("report_status", NFL_GAME_STATUS), ("practice_status", NFL_PRACTICE_STATUS)):
             got = {r[0] for r in conn.execute(f"SELECT DISTINCT {col} FROM core_nflverse_injuries WHERE season = ?", (s,))}

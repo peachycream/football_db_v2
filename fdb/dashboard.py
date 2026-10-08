@@ -117,7 +117,36 @@ TABLES = ("mart_player_week", "mart_qb_dropback_week", "mart_qb_pass_zones_week"
           "mart_player_routes_week", "mart_player_targets_by_route_week")
 
 
-def checks(conn) -> list[str]:
+def route_tree_fails(conn, pending=None) -> list[str]:
+    """Route-tree targets agree with nflverse's targets for every route-charted week (FTN vs nflverse, within 2%).
+
+    FTN publishes a game's plays and participation BEFORE its route charting: on 2026-10-07 ATL at NO (Monday night) had 171
+    plays and none with a route, while the other 15 games had routes on 35-50% of plays. That made week 4 read 967 targets
+    against nflverse's 1,046 (92%) and failed the whole builder, so the Player Dashboard's week-4 tables never updated. The
+    floor is therefore scaled to the share of the week's games whose routes ARE charted (15/16 here), and a week with an
+    uncharted game is reported as PENDING in `pending`, never as a pass it did not earn. The ceiling and a week with every
+    game charted are unchanged."""
+    fails = []
+    charted = {(s_, st, w): (n, u) for s_, st, w, n, u in conn.execute("""
+        SELECT season, season_type, week, COUNT(*), SUM(routed = 0) FROM
+          (SELECT season, season_type, week, gid, SUM(route1 IS NOT NULL AND route1 != '') routed
+           FROM core_ftn_participation GROUP BY 1, 2, 3, 4) GROUP BY 1, 2, 3""")}
+    for s_, st, w, a, b in conn.execute("""
+            SELECT r.season, r.season_type, r.week, r.t, n.t FROM
+              (SELECT season, season_type, week, SUM(targets) t FROM mart_player_routes_week GROUP BY 1, 2, 3) r
+              JOIN (SELECT season, season_type, week, SUM(targets) t FROM core_player_stats GROUP BY 1, 2, 3) n
+                ON n.season = r.season AND n.season_type = r.season_type AND n.week = r.week"""):
+        n, u = charted.get((s_, st, w), (0, 0))
+        share = (n - u) / n if n else 1.0
+        if not 0.95 * b * share <= a <= 1.02 * b:
+            fails.append(f"{s_} {st}{w}: route-tree targets {a} vs nflverse {b}"
+                         + (f" ({u} of {n} FTN games have no route charting yet)" if u else ""))
+        elif u and pending is not None:
+            pending.append(f"{s_} {st}{w}: route charting pending for {u} of {n} FTN games (targets {a} vs nflverse {b})")
+    return fails
+
+
+def checks(conn, pending=None) -> list[str]:
     fails = []
     # every nflverse stat line is present, and no row was invented
     # (nflverse ships ~21 nameless all-zero team rows a season, player_id NULL: not player lines)
@@ -152,14 +181,7 @@ def checks(conn) -> list[str]:
                   AND qb_scramble = 0 AND rusher_player_id IS NOT NULL GROUP BY 1) r ON r.season = l.season"""):
         if lanes < 0.90 * runs:
             fails.append(f"{s}: lanes hold {lanes}/{runs} designed runs")
-    # route targets agree with nflverse targets for every route-charted week (FTN vs nflverse, within 2%)
-    for s, st, w, a, b in conn.execute("""
-            SELECT r.season, r.season_type, r.week, r.t, n.t FROM
-              (SELECT season, season_type, week, SUM(targets) t FROM mart_player_routes_week GROUP BY 1, 2, 3) r
-              JOIN (SELECT season, season_type, week, SUM(targets) t FROM core_player_stats GROUP BY 1, 2, 3) n
-                ON n.season = r.season AND n.season_type = r.season_type AND n.week = r.week"""):
-        if not 0.95 * b <= a <= 1.02 * b:
-            fails.append(f"{s} {st}{w}: route-tree targets {a} vs nflverse {b}")
+    fails += route_tree_fails(conn, pending)
     # targets-by-route history: route-tagged targets are 97-100.5% of nflverse's targets every season
     for s, a, b in conn.execute("""
             SELECT r.season, r.t, n.t FROM
@@ -182,9 +204,13 @@ def build(conn) -> dict:
         for sql in (PLAYER_WEEK, QB_DROPBACK, QB_ZONES, RB_LANES, PLAYER_ROUTES, TARGETS_BY_ROUTE):
             conn.execute(sql)
         counts = {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in TABLES}
-        fails = checks(conn)
+        pending = []
+        fails = checks(conn, pending)
         conn.execute("ROLLBACK" if fails else "COMMIT")
     except Exception:
         conn.execute("ROLLBACK")
         raise
-    return {"failures": fails, "summary": ", ".join(f"{t.replace('mart_', '')} {n}" for t, n in counts.items())}
+    out = {"failures": fails, "summary": ", ".join(f"{t.replace('mart_', '')} {n}" for t, n in counts.items())}
+    if pending:
+        out["pending"] = pending
+    return out

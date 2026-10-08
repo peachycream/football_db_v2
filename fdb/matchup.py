@@ -48,6 +48,10 @@ class Data:
             "SELECT season, league_id, id, name, abbrev, division, logo, icon FROM core_mfl_franchises")}
         self.div_name = {(r["season"], r["league_id"], r["id"]): r["name"] for r in q(
             "SELECT season, league_id, id, name FROM core_mfl_divisions")}
+        self.div_conf = {(r["season"], r["league_id"], r["id"]): r["conference"] for r in q(
+            "SELECT season, league_id, id, conference FROM core_mfl_divisions")}
+        self.conf_name = {(r["season"], r["league_id"], r["id"]): r["name"] for r in q(
+            "SELECT season, league_id, id, name FROM core_mfl_conferences")}
         self.last_reg = {(r["season"], r["league_id"]): r["lastRegularSeasonWeek"] for r in q(
             "SELECT season, league_id, lastRegularSeasonWeek FROM core_mfl_league")}
         self.results = q("""SELECT season, league_id, week, id, opponent_id, isHome, score, adj_score, result, opt_pts
@@ -133,11 +137,13 @@ def build(conn) -> dict:
     # ---- per-franchise history from reported results (regular season only) ----------------------------
     by_fr = defaultdict(list)      # (season, league, id) -> [(week, result, score, opponent)]
     score_of = {}                  # (season, league, week, id) -> score (a week's points once)
+    opt_of = {}                    # (season, league, id) -> {week: best possible lineup}, regular season
     for r in d.results:
         if r["result"] not in RESULTS:
             fails.append(f"{r['season']}/{r['league_id']} wk{r['week']} {r['id']}: unknown result {r['result']!r}")
         if r["week"] <= (d.last_reg.get((r["season"], r["league_id"])) or 0):
             by_fr[(r["season"], r["league_id"], r["id"])].append((r["week"], r["result"], r["score"], r["opponent_id"]))
+            opt_of.setdefault((r["season"], r["league_id"], r["id"]), {})[r["week"]] = r["opt_pts"]
         score_of[(r["season"], r["league_id"], r["week"], r["id"])] = r["score"]
 
     def record_before(season, league, fid, week):
@@ -148,11 +154,6 @@ def build(conn) -> dict:
                 n += 1
                 w += res == "W"; l += res == "L"; t += res == "T"
         return w, l, t, n
-
-    pf_by = defaultdict(dict)      # (season, league, id) -> {week: score}, regular season
-    for (s, lg, wk, f), sc in score_of.items():
-        if wk <= (d.last_reg.get((s, lg)) or 0):
-            pf_by[(s, lg, f)][wk] = sc
 
     # ---- meetings between two franchises (regular season), oldest first -------------------------------
     meet = defaultdict(list)       # (league, frozenset({a, b})) -> [(season, week, {id: score})]
@@ -268,13 +269,17 @@ def build(conn) -> dict:
         for who, fid in (("home", home), ("away", away)):
             f = d.fr.get((season, league, fid))
             w, l, t, n = record_before(season, league, fid, week)
-            pfs = pf_by.get((season, league, fid), {})
+            # points for PER GAME, like the record and the league's own standings: a franchise plays two games a week
+            games_so_far = [(sc, wk) for wk, _, sc, _ in by_fr.get((season, league, fid), ()) if wk < week]
+            opts = [opt_of.get((season, league, fid), {}).get(wk) for _, wk in games_so_far]
+            conf = d.conf_name.get((season, league, d.div_conf.get((season, league, f["division"])))) if f else None
             col = d.colors.get((league, fid), (None, None))
             sides[who] = dict(
                 id=fid, name=strip_markup(f["name"]) if f else None, abbrev=f["abbrev"] if f else None,
                 division=d.div_name.get((season, league, f["division"])) if f else None,
                 logo=(f["logo"] or None) if f else None, icon=(f["icon"] or None) if f else None,
-                color=col[0], alt=col[1], w=w, l=l, t=t, n=n, pf=round(sum(v for wk, v in pfs.items() if wk < week), 2),
+                color=col[0], alt=col[1], w=w, l=l, t=t, n=n, pf=round(sum(sc for sc, _ in games_so_far), 2),
+                opt_pf=(round(sum(opts), 2) if games_so_far and all(o is not None for o in opts) else None), conf=conf,
                 div_id=f["division"] if f else None)
         rv = {who: res_row.get((season, league, week, sides[who]["id"])) for who in ("home", "away")}
         score = {k: (v["score"] if (v is not None and state == "FINAL") else None) for k, v in rv.items()}
@@ -312,7 +317,8 @@ def build(conn) -> dict:
                      last[2] if last else None, last[3] if last else None,
                      is_playoff, strength["home"], strength["away"], roster_actual["home"], roster_actual["away"],
                      bench["home"][0] or (f"MFL {bench['home'][3]}" if bench["home"][3] else None), bench["home"][1], bench["home"][2],
-                     bench["away"][0] or (f"MFL {bench['away'][3]}" if bench["away"][3] else None), bench["away"][1], bench["away"][2]))
+                     bench["away"][0] or (f"MFL {bench['away'][3]}" if bench["away"][3] else None), bench["away"][1], bench["away"][2],
+                     H["opt_pf"], A["opt_pf"], H["conf"], A["conf"]))
         # invariants checked per game
         for who in ("home", "away"):
             s_ = sides[who]

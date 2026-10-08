@@ -147,7 +147,9 @@ class Loaders(unittest.TestCase):
             with mock.patch.object(NflInjuriesLoader, "ROWS_PER_WEEK", (3, 700)):
                 put_nfl([{"week": 3, "gsis_id": f"00-{i}"} for i in range(3)] + [{"week": 19, "season_type": "POST", "game_type": "WC", "gsis_id": "00-9"}])
                 self.assertFalse(fw.load(e.c, get("nflverse.injuries"), fw.Scope(2026), apply=True)["failures"])
-                put_nfl([{"week": 3, "gsis_id": "00-1"}])
+                # a short regular week that is NOT the newest still fails (the newest one is exempt while its report is being
+                # published; tests/test_wednesday_feeds.py covers that case)
+                put_nfl([{"week": 2, "gsis_id": "00-1"}] + [{"week": 3, "gsis_id": f"00-{i}"} for i in range(3)])
                 r = fw.load(e.c, get("nflverse.injuries"), fw.Scope(2026), apply=True)
                 self.assertTrue(any("implausible row counts" in f for f in r["failures"]))
 
