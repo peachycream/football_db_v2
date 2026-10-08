@@ -206,6 +206,23 @@ source = "MFL TYPE=weeklyResults franchise.player[] of the next unplayed week (r
 grain = "league_snapshot"
 weekly = true
 
+# Phase 11: the week IN PROGRESS, live (the card's "so far" state). One liveScoring fetch (own raw endpoint) feeds both tables;
+# a snapshot per fetch, never final. Fetched only between a week's first kickoff and its completion, so the weekly job
+# (Wednesday, after the week closes) finds nothing to fetch.
+[[table]]
+name = "core_mfl_live_scores"
+owner = "mfl.live_scores"
+source = "MFL export TYPE=liveScoring&W=<week in progress> (snapshots), franchise score so far"
+grain = "league_snapshot"
+weekly = true
+
+[[table]]
+name = "core_mfl_live_players"
+owner = "mfl.live_players"
+source = "MFL TYPE=liveScoring franchise.players.player[] (reads mfl.live_scores' raw)"
+grain = "league_snapshot"
+weekly = true
+
 [[table]]
 name = "core_sleeper_league"
 owner = "sleeper.league"

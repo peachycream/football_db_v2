@@ -706,5 +706,137 @@ class UpcomingLineupsLoader(UpcomingGamesLoader):
         return [f"{scope.label}: lineups for franchises that are not in the pairings: {[r[0] for r in stray]}"] if stray else []
 
 
+# ------------------------------------------------------------ liveScoring ----
+class LiveScoresLoader(ProjectedScoresLoader):
+    """Snapshots of MFL's liveScoring for the week IN PROGRESS (first kickoff passed, week not complete): each franchise's score
+    so far. A current-state feed (no snapshot is final), spaced like the other heavy endpoints. A week not in progress fetches
+    nothing, so the weekly job (Wednesday, after the week closed) does no work here. One fetch feeds this table and
+    core_mfl_live_players."""
+    id = "mfl.live_scores"
+    table = "core_mfl_live_scores"
+    mfl_type = "liveScoring"
+    endpoint = "liveScoring"
+    CALL_SPACING = 3.0
+    MAX_ABS_SCORE = 5000.0
+
+    def fetch(self, partition):
+        season, league = self._split(partition)
+        saved, api.interval[0] = api.interval[0], max(api.interval[0], self.CALL_SPACING)
+        try:
+            return api.export(season, league, self.mfl_type, W=self._week_of(partition))
+        finally:
+            api.interval[0] = saved
+
+    def snapshot_bases(self, conn, season, league, fetching):
+        if not fetching:   # every week that has a raw file
+            return super().snapshot_bases(conn, season, league, fetching)
+        if season != schedule.current_season(conn):
+            return []
+        r = conn.execute("SELECT h2h FROM core_mfl_league WHERE season = ? AND league_id = ?", (season, league)).fetchone()
+        if r and r[0] != "YES":   # a league without head-to-head has no matchups to score
+            return []
+        done = {w for t, w in schedule.completed_weeks(conn, season) if t == "REG"}
+        now = utcnow()
+        kick = {}
+        for g in conn.execute("SELECT week, gameday, gametime FROM core_schedule WHERE season = ? AND season_type = 'REG'", (season,)):
+            k = eastern_to_utc(g["gameday"], g["gametime"])
+            kick[g["week"]] = min(kick.get(g["week"], k), k)
+        live = [w for w in sorted(kick) if w not in done and kick[w] <= now]
+        return [Scope(season, "REG", live[0], league=league)] if live else []
+
+    @staticmethod
+    def _games(payload: bytes):
+        d = json.loads(payload)["liveScoring"]
+        out = []
+        for m in api.as_list(d.get("matchup")):
+            frs = api.as_list(m.get("franchise"))
+            if len(frs) > 2:
+                raise ValueError(f"a matchup with {len(frs)} franchises")
+            out.append(frs)
+        return d.get("week"), out
+
+    def parse(self, payload):
+        week, games = self._games(payload)
+        if not games:
+            return self.expected_fields(), []
+        rows = []
+        for frs in games:
+            for f in frs:
+                other = [o["id"] for o in frs if o is not f]
+                rows.append({**{k: v for k, v in f.items() if k != "players"}, "week": week,
+                             "opponent_id": other[0] if other else ""})
+        return sorted({k for frs in games for f in frs for k in f} - {"players"}), rows
+
+    def scope_rows(self, rows, scope):
+        wrong = {r.get("week") for r in rows} - {str(scope.week)}
+        if wrong:
+            raise ValueError(f"{scope.label}: MFL returned week(s) {sorted(wrong)} for W={scope.week}")
+        return rows
+
+    def checks(self, conn, scope):
+        q = (scope.season, scope.league, scope.week, scope.snapshot)
+        rows = conn.execute("""SELECT id, opponent_id, score FROM core_mfl_live_scores
+                               WHERE season = ? AND league_id = ? AND week = ? AND snapshot_at = ?""", q).fetchall()
+        fails = []
+        pairs = {(r["id"], r["opponent_id"]) for r in rows}
+        miss = [p for p in pairs if p[1] != "" and (p[1], p[0]) not in pairs]
+        if miss:
+            fails.append(f"{scope.label}: {len(miss)} games without a mirror row, e.g. {miss[:2]}")
+        big = [r["id"] for r in rows if abs(r["score"]) > self.MAX_ABS_SCORE]
+        if big:
+            fails.append(f"{scope.label}: scores beyond +-{self.MAX_ABS_SCORE:g} for {sorted(set(big))[:3]}")
+        by = defaultdict(set)
+        for r in rows:
+            by[r["id"]].add(r["score"])
+        diff = sorted(f for f, sc in by.items() if len(sc) > 1)
+        if diff:
+            fails.append(f"{scope.label}: a franchise has different scores in its games: {diff[:3]}")
+        known = {r[0] for r in conn.execute("SELECT id FROM core_mfl_franchises WHERE season = ? AND league_id = ?", q[:2])}
+        stray = sorted({r["id"] for r in rows} - known) if known else []
+        if stray:
+            fails.append(f"{scope.label}: franchises not in core_mfl_franchises: {stray}")
+        if len(rows) < 2:
+            fails.append(f"{scope.label}: only {len(rows)} game rows")
+        return fails
+
+
+class LivePlayersLoader(LiveScoresLoader):
+    """Reads mfl.live_scores' raw file: franchise.players.player[] -> one row per franchise-player (a franchise's games share
+    one lineup, so a difference between its games is a source invariant, as in mfl.lineups)."""
+    id = "mfl.live_players"
+    table = "core_mfl_live_players"
+    fetches = False
+
+    def parse(self, payload):
+        week, games = self._games(payload)
+        rows, seen = [], {}
+        for frs in games:
+            for f in frs:
+                box = f.get("players")
+                ps = api.as_list(box.get("player") if isinstance(box, dict) else box)
+                sig = sorted((p["id"], p.get("status"), p.get("score")) for p in ps)
+                if f["id"] in seen:
+                    if seen[f["id"]] != sig:
+                        raise ValueError(f"franchise {f['id']} has different live lineups in its games")
+                    continue
+                seen[f["id"]] = sig
+                rows += [{**p, "franchise_id": f["id"], "week": week} for p in ps]
+        if not rows:
+            return self.expected_fields(), []
+        return sorted({k for r in rows for k in r} - {"franchise_id", "week"}), rows
+
+    def checks(self, conn, scope):
+        """A franchise's live starters add up to its live score (MFL's own total, within rounding) or the feed is not what we think."""
+        q = (scope.season, scope.league, scope.week, scope.snapshot)
+        bad = conn.execute("""SELECT s.id, s.score, p.total FROM
+                (SELECT id, MAX(score) score FROM core_mfl_live_scores WHERE season = ? AND league_id = ? AND week = ? AND snapshot_at = ?
+                 GROUP BY id) s
+              JOIN (SELECT franchise_id, SUM(score) total FROM core_mfl_live_players
+                    WHERE season = ? AND league_id = ? AND week = ? AND snapshot_at = ? AND status = 'starter' GROUP BY franchise_id) p
+                ON p.franchise_id = s.id WHERE ABS(p.total - s.score) > 0.02""", q + q).fetchall()
+        return ([f"{scope.label}: live starters do not add to the live score for {[tuple(b) for b in bad[:3]]}"] if bad else [])
+
+
 LOADERS = (LeagueLoader, DivisionsLoader, ConferencesLoader, FranchisesLoader, RostersLoader,
-           RulesLoader, PlayerScoresLoader, PlayersLoader, WeeklyResultsLoader, LineupsLoader, ProjectedScoresLoader, UpcomingGamesLoader, UpcomingLineupsLoader)
+           RulesLoader, PlayerScoresLoader, PlayersLoader, WeeklyResultsLoader, LineupsLoader, ProjectedScoresLoader, UpcomingGamesLoader, UpcomingLineupsLoader,
+           LiveScoresLoader, LivePlayersLoader)

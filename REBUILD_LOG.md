@@ -778,3 +778,14 @@ First weekly run after week 4 failed three times, each a source fact; run 3 ende
 
 ### Gate after schemas 036 and 037 (2026-10-08)
 `fdb rebuild` x2 -> identical content hash `c634c88e24f90633b40a52ec3d4ef3301e9fa3809d493327d40291e3b9d83aa8`, 0 network calls (supersedes the earlier "NOT re-run" notes). Snapshot first: `database/pre_pf_per_game_20261008.db`. The rebuild exported `app_state/app_post_log.csv` with today's three posts (week 3 recap is older; today: week 5 preview Denver at Cincinnati (deleted by hand in Discord), week 5 preview Washington at Carolina, week 4 recap).
+
+### Phase 11 addendum 3 (2026-10-08): the Sunday "so far" card (live scoring)
+A week-5 recap cannot be FINAL on Sunday (MFL settles the week after Monday night; the weekly job loads it Wednesday 05:00). Turon chose a Sunday-night "so far" card for the chosen game.
+- **Source probed live 2026-10-08** (30590 wk5, before kickoff): `TYPE=liveScoring&W=5` -> `matchup[].franchise[2]` with `score`, `playersYetToPlay`, `playersCurrentlyPlaying`, `gameSecondsRemaining`, and `players.player[]` (`id`, `status`, `score`, `gameSecondsRemaining`, `updatedStats`). Contracts `mfl.live_scores.fields`, `mfl.live_players.fields`.
+- **Loaders** `mfl.live_scores` -> `core_mfl_live_scores`, `mfl.live_players` -> `core_mfl_live_players` (schema 038, registry, `weekly = true`). A snapshot per fetch, never final (rule 7). Only the week IN PROGRESS (first kickoff passed, not complete) is fetched, so the Wednesday weekly job finds nothing to do. Checks: mirror rows, one score per franchise, franchises known, and a franchise's live starters add to its live score (+-0.02).
+- **Mart** (schema 039): `live_snapshot_at`, `*_live_score`, `*_live_yet`, `*_live_playing`; for a week with a live snapshot, the starters come from the live feed and their points so far are `actual` in `mart_matchup_card_players/_groups`. FINAL rows never carry live numbers.
+- **Card/commentary**: a LIVE card shows points so far, starters yet to play/playing, projected total, position board "points so far", "Top scorers so far"; no win probability (none is invented). Paragraphs: So far, Position battles so far, Top scorers so far, The stakes, The series.
+- **Post log** (schema 040): table rebuilt to allow mode `live` (rows carried over unchanged).
+- **Commands**: `fdb live-refresh` (fetch + rebuild, posts nothing), `fdb post --mode live [--game HOME:AWAY] [--send]`, `fdb card --mode live`. Sunday sequence: `fdb live-refresh`, then `fdb post --mode live` (dry run), then `--send`.
+- Tests: `tests/test_live_scoring.py` (14); suite 496 OK. Snapshot before migrating: `database/pre_live_20261008.db`.
+- NOT done: no real in-game payload has been loaded yet (the only live probe was pre-kickoff); `fdb rebuild` x2 not re-run after schemas 038-040; nothing is scheduled (the user runs the two commands).

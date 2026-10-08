@@ -91,6 +91,20 @@ class Data:
         for r in q("SELECT season, league_id, week, snapshot_at, id, score FROM core_mfl_projected_scores"):
             snaps[(r["season"], r["league_id"], r["week"])][r["snapshot_at"]][r["id"]] = r["score"]
         self.proj = {k: sorted(v.items()) for k, v in snaps.items()}
+        # the NEWEST liveScoring snapshot per (season, league, week): the "so far" numbers of a week in progress
+        newest = {(r["season"], r["league_id"], r["week"]): r["s"] for r in q(
+            "SELECT season, league_id, week, MAX(snapshot_at) s FROM core_mfl_live_scores GROUP BY 1, 2, 3")}
+        self.live_snap = newest
+        self.live = defaultdict(dict)          # (season, league, week) -> franchise -> (score, yet to play, playing)
+        for r in q("SELECT season, league_id, week, snapshot_at, id, score, playersYetToPlay, playersCurrentlyPlaying FROM core_mfl_live_scores"):
+            k = (r["season"], r["league_id"], r["week"])
+            if newest.get(k) == r["snapshot_at"]:
+                self.live[k][r["id"]] = (r["score"], r["playersYetToPlay"], r["playersCurrentlyPlaying"])
+        self.live_players = defaultdict(lambda: defaultdict(list))   # (season, league, week) -> franchise -> [(id, score)] starters
+        for r in q("SELECT season, league_id, week, snapshot_at, franchise_id, id, status, score FROM core_mfl_live_players"):
+            k = (r["season"], r["league_id"], r["week"])
+            if newest.get(k) == r["snapshot_at"] and r["status"] == "starter":
+                self.live_players[k][r["franchise_id"]].append((r["id"], r["score"]))
         self.colors = load_colors()
 
     def pre_kickoff_projection(self, season, league, week):
@@ -204,6 +218,9 @@ def build(conn) -> dict:
         for r in rows:
             by[r["franchise_id"]].append((r["id"], r["score"]))
         lineup_rows[key] = by
+    for key, by in d.live_players.items():
+        if key not in lineup_rows:   # a week with results is final: the final lineups win
+            lineup_rows[key] = by
     for key, rows in d.up_lineups.items():
         if key in lineup_rows:
             continue
@@ -307,6 +324,10 @@ def build(conn) -> dict:
                 bench[who] = (info["display_name"] if info else None, info["position"] if info else None, top[0], top[1])
             else:
                 bench[who] = (None, None, None, None)
+        live = d.live.get((season, league, week)) if state != "FINAL" else None
+        lv = {who: (live or {}).get(sides[who]["id"]) for who in ("home", "away")}
+        live_cols = ((d.live_snap.get((season, league, week)), lv["home"][0], lv["away"][0], lv["home"][1], lv["away"][1],
+                      lv["home"][2], lv["away"][2]) if (lv["home"] and lv["away"]) else (None,) * 7)
         is_playoff = int(week > (d.last_reg.get((season, league)) or 0))
         w_h, w_a, t_, last = series(league, home, away, season, week)
         rival = int(bool(sides["home"]["div_id"]) and sides["home"]["div_id"] == sides["away"]["div_id"])
@@ -325,7 +346,7 @@ def build(conn) -> dict:
                      is_playoff, strength["home"], strength["away"], roster_actual["home"], roster_actual["away"],
                      bench["home"][0] or (f"MFL {bench['home'][3]}" if bench["home"][3] else None), bench["home"][1], bench["home"][2],
                      bench["away"][0] or (f"MFL {bench['away'][3]}" if bench["away"][3] else None), bench["away"][1], bench["away"][2],
-                     H["opt_pf"], A["opt_pf"], H["conf"], A["conf"], *H["cur"], *A["cur"]))
+                     H["opt_pf"], A["opt_pf"], H["conf"], A["conf"], *H["cur"], *A["cur"], *live_cols))
         # invariants checked per game
         for who in ("home", "away"):
             s_ = sides[who]

@@ -134,7 +134,7 @@ def render_to_file(conn, league=None, season=None, week=None, home=None, away=No
     if mode:
         if week or home or away:
             raise RenderError("--mode picks the week and the game itself; do not combine it with --week/--home/--away")
-        target = (matchup_weeks.recap_target if mode == "recap" else matchup_weeks.preview_target)(conn, league, season)
+        target = {"recap": matchup_weeks.recap_target, "live": matchup_weeks.live_target}.get(mode, matchup_weeks.preview_target)(conn, league, season)
         if not target["ready"]:
             raise RenderError(f"{mode}: {target['reason']}")
         league, season, week = target["league"], target["season"], target["week"]

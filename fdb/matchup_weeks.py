@@ -24,14 +24,16 @@ def _week_status(conn, league, season):
     FINAL; PREVIEW only if every game is. `projected` = every game has both totals; `snapshot` = a pre-kickoff projection
     snapshot exists at all (so an unprojected game then means a LINEUP is missing, not a projection)."""
     out = {}
-    for r in conn.execute("""SELECT week, state, is_playoff, home_proj, away_proj, proj_snapshot_at FROM mart_matchup_card
+    for r in conn.execute("""SELECT week, state, is_playoff, home_proj, away_proj, proj_snapshot_at, home_live_score, away_live_score
+                             FROM mart_matchup_card
                              WHERE league_id = ? AND season = ?""", (league, season)):
-        w = out.setdefault(r["week"], {"states": set(), "games": 0, "playoff": False, "snapshot": False, "unprojected": 0})
+        w = out.setdefault(r["week"], {"states": set(), "games": 0, "playoff": False, "snapshot": False, "unprojected": 0, "unscored": 0})
         w["states"].add(r["state"])
         w["games"] += 1
         w["playoff"] = w["playoff"] or bool(r["is_playoff"])
         w["snapshot"] = w["snapshot"] or r["proj_snapshot_at"] is not None
         w["unprojected"] += r["home_proj"] is None or r["away_proj"] is None
+        w["unscored"] += r["home_live_score"] is None or r["away_live_score"] is None
     for w in out.values():
         s = w.pop("states")
         w["state"] = "FINAL" if s == {"FINAL"} else "PREVIEW" if s == {"PREVIEW"} else "LIVE"
@@ -86,6 +88,26 @@ def recap_target(conn, league=None, season=None) -> dict:
             "waiting_for": ahead[0] if ahead else None,
             "reason": (f"week {ahead[0]} is in progress or waiting for its results; its recap is not ready" if ahead else None),
             "featured": _featured(conn, league, season, week)}
+
+
+def live_target(conn, league=None, season=None) -> dict:
+    """The week IN PROGRESS (its first kickoff has passed and its results are not loaded), for the "so far" card. Ready only
+    when every game of that week has live scores loaded (`fdb live-refresh` fetches them); never guessed from projections."""
+    league, season, problem = _scope(conn, league, season)
+    base = {"mode": "live", "league": league, "season": season, "week": None, "state": None, "ready": False,
+            "reason": None, "projected": None, "is_playoff": None, "featured": None}
+    if problem:
+        return {**base, "reason": problem}
+    weeks = _week_status(conn, league, season)
+    live = sorted(w for w, v in weeks.items() if v["state"] == "LIVE")
+    if not live:
+        return {**base, "reason": "no week is in progress (a week is live from its first kickoff until its results are loaded)"}
+    week = live[0]
+    v = weeks[week]
+    ready = v["unscored"] == 0
+    return {**base, "week": week, "state": "LIVE", "ready": ready, "projected": v["projected"], "is_playoff": v["playoff"],
+            "featured": _featured(conn, league, season, week),
+            "reason": None if ready else f"{v['unscored']} of {v['games']} games have no live scores loaded yet; run `fdb live-refresh`"}
 
 
 def preview_target(conn, league=None, season=None) -> dict:

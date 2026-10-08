@@ -120,6 +120,15 @@ def cmd_matchup_refresh(a):
         conn.close()
 
 
+def cmd_live_refresh(a):
+    from . import matchup_refresh
+    conn = _conn()
+    try:
+        return matchup_refresh.run(conn, a.league, live=True)
+    finally:
+        conn.close()
+
+
 def cmd_post(a):
     from . import discord_post
     conn = _conn()
@@ -194,7 +203,7 @@ def main(argv=None):
     s.add_argument("--week", type=int)
     s.add_argument("--home")
     s.add_argument("--away")
-    s.add_argument("--mode", choices=("recap", "preview"), help="what a job asks for: recap = the latest week with results "
+    s.add_argument("--mode", choices=("recap", "preview", "live"), help="what a job asks for: recap = the latest week with results "
                    "loaded, preview = the next week that has not kicked off (each with its featured game); refuses if not ready")
     s.add_argument("--out", help="write here instead of data/cards/")
     s.set_defaults(fn=cmd_card)
@@ -202,9 +211,14 @@ def main(argv=None):
                        "say whether a recap and a preview are ready (for a late-set lineup or a Thursday refresh). Posts nothing")
     s.add_argument("--league", default="30590")
     s.set_defaults(fn=cmd_matchup_refresh)
+    s = sub.add_parser("live-refresh", help="fetch MFL's live scores for the week in progress and rebuild the card data, so "
+                       "`fdb post --mode live` can post the 'so far' card. Posts nothing")
+    s.add_argument("--league", default="30590")
+    s.set_defaults(fn=cmd_live_refresh)
     s = sub.add_parser("post", help="post the Matchup of the Week card to Discord (league 30590 only, MANUAL). Dry run by default: "
                        "renders the card and says what would be sent; nothing is sent without --send")
-    s.add_argument("--mode", choices=("recap", "preview"), required=True)
+    s.add_argument("--mode", choices=("recap", "preview", "live"), required=True,
+                   help="live = the 'so far' card of the week in progress (run `fdb live-refresh` first)")
     s.add_argument("--league", default="30590")
     s.add_argument("--send", action="store_true", help="actually post (asks to confirm unless --yes)")
     s.add_argument("--yes", action="store_true", help="skip the confirmation prompt (with --send)")

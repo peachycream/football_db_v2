@@ -202,7 +202,7 @@ def pre_context(conn, card) -> dict:
     return {"teams": len(team), "by_team": team, "any_played": bool(played), "pool": pool}
 
 
-def preview_paragraphs(conn, card) -> list:
+def preview_paragraphs(conn, card, live=False) -> list:
     if card["state"] == "FINAL":
         return []
     H, A = card["home"], card["away"]
@@ -212,7 +212,7 @@ def preview_paragraphs(conn, card) -> list:
          f"({H['w']}-{H['l']}{'-' + str(H['t']) if H['t'] else ''}).")
     if card["rivalry"]:
         t += " It is a division game."
-    if H["proj"] is not None and A["proj"] is not None:
+    if not live and H["proj"] is not None and A["proj"] is not None:
         gap = abs(H["proj"] - A["proj"])
         fav = H if H["proj"] > A["proj"] else A
         other = A if fav is H else H   # the favourite's total FIRST: "(1,389.5 to 1,371.1)" reads as favourite to underdog
@@ -283,8 +283,46 @@ def preview_paragraphs(conn, card) -> list:
     return out
 
 
+def live_paragraphs(conn, card) -> list:
+    """The week is in progress: where the game stands from MFL's liveScoring (points so far, starters yet to play), the position
+    board and top scorers so far (the same numbers as the graphics), then the stakes and the series from the preview."""
+    H, A = card["home"], card["away"]
+    out = []
+    gap = abs(H["live"] - A["live"])
+    lead, trail = (H, A) if H["live"] > A["live"] else (A, H)
+    if gap < 1e-9:
+        t = f"{A['name']} and {H['name']} are level at {H['live']:,.2f} so far."
+    else:
+        t = f"{lead['name']} lead {trail['name']} {lead['live']:,.2f} to {trail['live']:,.2f}, a margin of {gap:,.2f}."
+    t += (f" {A['name']} have {A['yet']} starters yet to play and {A['playing']} playing; "
+          f"{H['name']} have {H['yet']} yet to play and {H['playing']} playing.")
+    if H["proj"] is not None and A["proj"] is not None:
+        t += f" Before kickoff the projections were {A['proj']:,.2f} for {A['name']} and {H['proj']:,.2f} for {H['name']}."
+    out.append({"lead": "So far", "text": t})
+    board = card["board"]
+    if board and card["board_basis"] == "so_far":
+        homes = sorted((b for b in board if b["edge"] > 0), key=lambda b: -b["edge"])
+        aways = sorted((b for b in board if b["edge"] < 0), key=lambda b: b["edge"])
+        bits = []
+        if homes:
+            bits.append(f"{H['name']} lead " + ", ".join(f"{b['grp']} (+{b['edge']:,.2f})" for b in homes[:3]))
+        if aways:
+            bits.append(f"{A['name']} lead " + ", ".join(f"{b['grp']} (+{abs(b['edge']):,.2f})" for b in aways[:3]))
+        if bits:
+            out.append({"lead": "Position battles so far", "text": "; ".join(bits) + "."})
+    pl = card["players"]
+    if card["players_basis"] == "so_far" and (pl["home"] or pl["away"]):
+        bits = [f"{s_['name']}: " + ", ".join(f"{p['name']} ({p['position']}) {p['value']:,.2f}" for p in pl[who])
+                for s_, who in ((A, "away"), (H, "home")) if pl[who]]
+        out.append({"lead": "Top scorers so far", "text": "; ".join(bits) + "."})
+    out += [p for p in preview_paragraphs(conn, card, live=True) if p["lead"] in ("The stakes", "The series")]
+    return out
+
+
 def paragraphs(conn, card) -> list:
-    return recap_paragraphs(conn, card) if card["state"] == "FINAL" else preview_paragraphs(conn, card)
+    if card["state"] == "FINAL":
+        return recap_paragraphs(conn, card)
+    return live_paragraphs(conn, card) if card.get("live") else preview_paragraphs(conn, card)
 
 
 def to_markdown(paras, limit: int = 1900) -> str:

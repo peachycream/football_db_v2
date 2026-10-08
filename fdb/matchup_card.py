@@ -150,10 +150,12 @@ def card(conn, league, season, week, home, away):
     if r is None:
         return None
     final = r["state"] == "FINAL"
+    live = (not final) and r["home_live_score"] is not None and r["away_live_score"] is not None   # a week in progress, points so far
     side = lambda k: {"id": r[f"{k}_id"], "name": r[f"{k}_name"] or r[f"{k}_id"], "abbrev": r[f"{k}_abbrev"] or r[f"{k}_id"],
                       "division": r[f"{k}_division"], "logo": r[f"{k}_logo"], "w": r[f"{k}_w"], "l": r[f"{k}_l"], "t": r[f"{k}_t"],
                       "pf": r[f"{k}_pf"], "opt_pf": r[f"{k}_opt_pf"], "conference": r[f"{k}_conference"], "score": r[f"{k}_score"], "opt": r[f"{k}_opt_pts"], "proj": r[f"{k}_proj"],
-                      "proj_missing": r[f"{k}_proj_missing"]}
+                      "proj_missing": r[f"{k}_proj_missing"], "live": r[f"{k}_live_score"],
+                      "yet": r[f"{k}_live_yet"], "playing": r[f"{k}_live_playing"]}
     H, A = side("home"), side("away")
     if final:   # a recap says where each team stands NOW (after this week), not before the game
         for k, d in (("home", H), ("away", A)):
@@ -167,7 +169,7 @@ def card(conn, league, season, week, home, away):
     grp = {(x["franchise_id"], x["grp"]): dict(x) for x in conn.execute(
         "SELECT franchise_id, grp, n_starters, proj, actual FROM mart_matchup_card_groups WHERE league_id = ? AND season = ? AND week = ?",
         (league, season, week))}
-    key = "actual" if final else "proj"
+    key = "actual" if (final or live) else "proj"
     board = []
     for g in GROUPS:
         hv = (grp.get((H["id"], g)) or {}).get(key)
@@ -176,9 +178,9 @@ def card(conn, league, season, week, home, away):
             continue
         hv, av = hv or 0.0, av or 0.0
         board.append({"grp": g, "home": hv, "away": av, "edge": hv - av})
-    board_basis = ("actual" if final else "projected") if board else None
+    board_basis = ("actual" if final else "so_far" if live else "projected") if board else None
     biggest = max(board, key=lambda b: abs(b["edge"]))["grp"] if board else None
-    if not final and r["proj_snapshot_at"] is None:
+    if not final and not live and r["proj_snapshot_at"] is None:
         notes.append("No projection was captured before kickoff for this week, so projected points, the position board and "
                      "win probability are not shown. They start with the first week the loader fetched before kickoff.")
     if r["lineup_source"] == "upcoming_snapshot":
@@ -189,14 +191,14 @@ def card(conn, league, season, week, home, away):
     unresolved = sum(1 for p in pl if p["display_name"] is None)
     if unresolved:
         notes.append(f"{unresolved} starters have no player identity yet (shown by MFL id).")
-    sortkey = "actual" if final else "proj"
+    sortkey = "actual" if (final or live) else "proj"
     players = {}
     for who, s in (("home", H), ("away", A)):
         ps = [p for p in pl if p["franchise_id"] == s["id"] and p[sortkey] is not None]
         ps.sort(key=lambda p: (-p[sortkey], p["source_player_id"]))
         players[who] = [{"name": p["display_name"] or f"MFL {p['source_player_id']}", "position": p["position"] or "?",
                          "value": p[sortkey]} for p in ps[:3]]
-    players_basis = ("actual" if final else "projected") if (players["home"] or players["away"]) else None
+    players_basis = ("actual" if final else "so_far" if live else "projected") if (players["home"] or players["away"]) else None
     winner = margin = None
     if final and H["score"] is not None and A["score"] is not None:
         margin = abs(H["score"] - A["score"])
@@ -206,7 +208,8 @@ def card(conn, league, season, week, home, away):
     out = {"league_id": league, "league_name": league_name(conn, league), "season": season, "week": week, "state": r["state"],
            "is_playoff": bool(r["is_playoff"]), "bench": bench,
            "home": H, "away": A, "rivalry": bool(r["is_division_rivalry"]), "winner": winner, "margin": margin,
-           "win_prob": None if final else win_probability(H["proj"], A["proj"]),
+           "win_prob": None if (final or live) else win_probability(H["proj"], A["proj"]),
+           "live": live, "live_snapshot_at": r["live_snapshot_at"] if live else None,
            "board": board, "board_basis": board_basis, "biggest": biggest,
            "series": {"meetings": r["series_meetings"], "home_wins": r["series_home_wins"], "away_wins": r["series_away_wins"],
                       "ties": r["series_ties"], "last": None if r["last_meeting_season"] is None else {
@@ -246,7 +249,7 @@ def takeaways(c):
         top = max(b, key=lambda x: abs(x["edge"]))
         who = H if top["edge"] > 0 else A
         out.append(("flame", f"Biggest edge: {who['name']} at {top['grp']}, {abs(top['edge']):,.2f} "
-                             f"{'points' if c['board_basis'] == 'actual' else 'projected points'}."))
+                             f"{'points' if c['board_basis'] == 'actual' else 'points so far' if c['board_basis'] == 'so_far' else 'projected points'}."))
         wins = {"home": [x for x in b if x["edge"] > 0], "away": [x for x in b if x["edge"] < 0]}
         lead = max(wins, key=lambda k: (len(wins[k]), sum(abs(x["edge"]) for x in wins[k])))
         s = H if lead == "home" else A
@@ -259,6 +262,12 @@ def takeaways(c):
         left = sum((s["opt"] - s["score"]) for s in (H, A) if s["opt"] is not None and s["score"] is not None)
         out.append(("scale", (f"{win['name']} won by {c['margin']:,.2f}. " if win else "Tied. ")
                     + f"Between them {left:,.2f} points stayed on the bench."))
+    elif c.get("live"):
+        gap = abs(H["live"] - A["live"])
+        lead = H if H["live"] > A["live"] else A if A["live"] > H["live"] else None
+        left = (H["yet"] or 0) + (A["yet"] or 0)
+        out.append(("scale", (f"{lead['name']} lead by {gap:,.2f} so far. " if lead else "Level so far. ")
+                    + f"{left} starters are yet to play."))
     elif H["proj"] is not None and A["proj"] is not None:
         gap, tot = abs(H["proj"] - A["proj"]), H["proj"] + A["proj"]
         out.append(("scale", f"Projected gap is {gap:,.2f} points on about {tot / 2:,.0f} each"
@@ -355,6 +364,11 @@ def _sections(c) -> dict:
             else:
                 sub = f'Won by {c["margin"]:,.2f}' if c["winner"] == who else f'Lost by {c["margin"]:,.2f}'
             sub2, cap = f'{rec(s["w"], s["l"], s["t"])} after this week', "Final"
+        elif c.get("live"):
+            big = f'{s["live"]:,.2f}'
+            sub = f'{rec(s["w"], s["l"], s["t"])} before this week'
+            sub2 = f'{s["yet"]} yet to play · {s["playing"]} playing'
+            cap = "So far" + (f' · projected {s["proj"]:,.2f}' if s["proj"] is not None else "")
         else:
             big = f'{s["proj"]:,.2f}' if s["proj"] is not None else "-"
             sub = f'{rec(s["w"], s["l"], s["t"])} · {s["w"] + s["l"] + s["t"]} games played'
@@ -366,7 +380,7 @@ def _sections(c) -> dict:
     hero = (f'<div class="hero"><div style="position:absolute;inset:0;background:{lt};clip-path:polygon(0 0,57% 0,43% 100%,0 100%)"></div>'
             f'<div style="position:absolute;inset:0;background:{rt};clip-path:polygon(57% 0,100% 0,100% 100%,43% 100%)"></div>'
             f'{wm(AW, True)}{wm(HM, False)}{side(AW, "away", lt_txt)}{side(HM, "home", rt_txt)}'
-            f'<div class="vs">{"FINAL" if final else "VS"}</div></div>')
+            f'<div class="vs">{"FINAL" if final else "LIVE" if c.get("live") else "VS"}</div></div>')
 
     wp = ""
     if c["win_prob"]:
@@ -393,7 +407,7 @@ def _sections(c) -> dict:
                      f'<div class="half" style="border-radius:7px 0 0 7px">{lh}</div>'
                      f'<div class="half" style="border-radius:0 7px 7px 0;border-left:1px solid {BG}">{rh}</div>'
                      f'<span style="text-align:right;color:{col}">{flame}{abs(b["edge"]):,.2f}</span></div>')
-        basis = "actual points" if c["board_basis"] == "actual" else "projected points"
+        basis = {"actual": "actual points", "so_far": "points so far"}.get(c["board_basis"], "projected points")
         legend = (f'<div class="lbl" style="margin-bottom:6px;font-weight:500"><span style="color:{AW["color"]}">&#9664; {_e(AW["name"])}</span>'
                   f'<span style="color:{HM["color"]}">{_e(HM["name"])} &#9654;</span></div>')
         board = (f'<div class="sec"><div class="lbl"><span>Position edge &middot; {basis}</span>'
@@ -444,8 +458,8 @@ def _sections(c) -> dict:
                 f'<span style="flex:1">{_e(p["name"])} <span style="color:#8e98b3">{_e(p["position"])}</span></span>'
                 f'<span>{p["value"]:,.2f}</span></div>' for p in c["players"][who])
             return f'<div>{rows}</div>'
-        title = "Top performers" if c["players_basis"] == "actual" else "Players to watch"
-        sub = "Actual points" if c["players_basis"] == "actual" else "Projected points"
+        title = {"actual": "Top performers", "so_far": "Top scorers so far"}.get(c["players_basis"], "Players to watch")
+        sub = {"actual": "Actual points", "so_far": "Points so far"}.get(c["players_basis"], "Projected points")
         players = (f'<div class="sec"><div class="lbl"><span>{title}</span><span>{sub}, week {c["week"]}</span></div>'
                    f'<div class="pl">{col("away", AW)}{col("home", HM)}</div></div>')
 
@@ -453,7 +467,7 @@ def _sections(c) -> dict:
     take = "".join(f'<div class="tk"><b>{icons.get(i, "&bull;")}</b><span>{_e(t)}</span></div>' for i, t in c["takeaways"])
     take = f'<div class="take">{take}</div>' if take else '<div style="height:16px"></div>'
 
-    top = (f'<div class="top"><span>{_e(c["league_name"])} &middot; Week {c["week"]}{" recap" if final else ""}</span>'
+    top = (f'<div class="top"><span>{_e(c["league_name"])} &middot; Week {c["week"]}{" recap" if final else " so far" if c.get("live") else ""}</span>'
            f'<span>{pills}</span></div>')
     return {"top": top, "hero": hero, "wp": wp, "board": board, "tape": tape, "bench": bench, "players": players, "take": take}
 

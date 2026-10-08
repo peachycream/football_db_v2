@@ -116,13 +116,14 @@ def send(url: str, content: str, png: bytes = None, filename: str = None):
 
 # ----------------------------------------------------------------------- content --
 def caption(card: dict, mode: str) -> str:
-    return f"**{card['league_name']} - Week {card['week']} {'recap' if mode == 'recap' else 'preview'} · Matchup of the Week**"
+    word = {"recap": "recap", "live": "so far"}.get(mode, "preview")
+    return f"**{card['league_name']} - Week {card['week']} {word} · Matchup of the Week**"
 
 
 def build_parts(card: dict, mode: str, panels: dict, commentary: str, stem: str) -> list:
     """The messages, in order: [{"name", "content", "png" or None, "filename"}]. The breakdown is skipped when there is none."""
     parts = [{"name": "cover", "content": caption(card, mode), "png": panels["cover"], "filename": f"{stem}_cover.png"},
-             {"name": "board", "content": "**Position board**" + (" (projected)" if card["state"] != "FINAL" else ""),
+             {"name": "board", "content": "**Position board**" + (" (points so far)" if card.get("live") else " (projected)" if card["state"] != "FINAL" else ""),
               "png": panels["board"], "filename": f"{stem}_board.png"}]
     if commentary:
         head = "**The breakdown**\n\n"
@@ -234,7 +235,7 @@ def run(conn, mode: str, league: str = "30590", send_it: bool = False, yes: bool
     if league not in LEAGUES:
         say(f"post: posting is enabled for league {', '.join(LEAGUES)} only, not {league}")
         return 1
-    target = (matchup_weeks.recap_target if mode == "recap" else matchup_weeks.preview_target)(conn, league)
+    target = {"recap": matchup_weeks.recap_target, "live": matchup_weeks.live_target}.get(mode, matchup_weeks.preview_target)(conn, league)
     if not target["ready"]:
         say(f"post: {mode} is not ready: {target['reason']}")
         return 1

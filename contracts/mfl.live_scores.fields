@@ -1,0 +1,8 @@
+# Recorded from a live response 2026-10-08 (30590 wk5, before the first kickoff): TYPE=liveScoring franchise entries, without players.
+# A missing field fails the load. opponent_id is derived from the matchup pair.
+id
+isHome
+score
+gameSecondsRemaining
+playersYetToPlay
+playersCurrentlyPlaying

@@ -12,9 +12,14 @@ from . import matchup, matchup_weeks, weekly
 LOADERS = ("mfl.upcoming_games", "mfl.upcoming_lineups", "mfl.projected_scores")
 
 
-def run(conn, league: str = "30590") -> int:
+LIVE_LOADERS = ("mfl.live_scores", "mfl.live_players")
+
+
+def run(conn, league: str = "30590", live: bool = False) -> int:
+    """live=True (`fdb live-refresh`): fetch MFL's liveScoring for the week in progress instead of the pre-game feeds, rebuild the
+    card data and say whether a "so far" card is ready. A week not in progress fetches nothing, and says so."""
     rc = 0
-    for lid in LOADERS:
+    for lid in (LIVE_LOADERS if live else LOADERS):
         d = weekly.run_loader(conn, lid)
         line = f"{lid}: fetched {d['fetched']}, cached {d['cached']}, loaded {d['loaded']}"
         if d["failures"]:
@@ -24,7 +29,7 @@ def run(conn, league: str = "30590") -> int:
     res = matchup.build(conn)
     print(f"matchup.build: {res['summary']}" + (f" FAILED {res['failures'][:2]}" if res["failures"] else ""))
     rc = rc or (1 if res["failures"] else 0)
-    for fn in (matchup_weeks.recap_target, matchup_weeks.preview_target):
+    for fn in ((matchup_weeks.live_target,) if live else (matchup_weeks.recap_target, matchup_weeks.preview_target)):
         t = fn(conn, league)
         state = "ready" if t["ready"] else "NOT ready"
         week = f"week {t['week']}" if t["week"] else "no week"
