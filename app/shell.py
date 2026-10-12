@@ -6,7 +6,7 @@ import html
 from . import theme
 
 NAV_LINKS = [("/ownership/", "OWNERSHIP"), ("/viz/player", "PLAYER"), ("/viz/offense", "TEAM OFFENSE"),
-             ("/viz/defense", "TEAM DEFENSE"), ("/matchups/", "MATCHUPS"), ("/matchup/", "MATCHUP CARD")]
+             ("/viz/defense", "TEAM DEFENSE"), ("/matchups/", "MATCHUPS"), ("/matchup/", "MATCHUP CARD"), ("/devy/", "DEVY")]
 
 # The hub at "/" (v1's landing page; the React pages' "Hub" link points here). Only ported apps.
 HUB_APPS = [
@@ -16,6 +16,7 @@ HUB_APPS = [
     ("/viz/defense", "Team Defense Environment", "EPA, pass rush, coverage, run defense allowed, scheme"),
     ("/matchups/", "Matchup Tool", "Which defenses allow the most fantasy points to each position"),
     ("/matchup/", "Matchup Card", "Review the weekly Matchup of the Week card before anything is posted"),
+    ("/devy/", "Devy Tracker", "Your devy players and the best unrostered college players, with CFB stats, size and draft class"),
 ]
 
 

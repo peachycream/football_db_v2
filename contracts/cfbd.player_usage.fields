@@ -1,0 +1,8 @@
+# Recorded from a live response 2026-10-10 (player/usage?year=2026). `usage` is nested; its keys are flattened to usage_<key>.
+season
+id
+name
+position
+team
+conference
+usage

@@ -17,12 +17,14 @@ def create_app() -> Flask:
     from .viz import bp as viz_bp
     from .dashboard import bp as dashboard_bp
     from .matchup_card import bp as matchup_card_bp
+    from .devy import bp as devy_bp
     app.register_blueprint(ownership_bp)
     app.register_blueprint(matchups_bp)
     app.register_blueprint(env_bp)
     app.register_blueprint(viz_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(matchup_card_bp)
+    app.register_blueprint(devy_bp)
     from .shell import hub_html
     app.add_url_rule("/", "home", hub_html)
     return app

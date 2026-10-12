@@ -578,3 +578,84 @@ weekly = true
 name = "app_alert_final"
 owner = "alerts.engine"
 kind = "app"
+
+# --- Phase 14: CFB / devy tracker. CFBD (api.collegefootballdata.com, Bearer CFB_API_KEY, 1,000 calls a month:
+# one whole-season call per loader). Season grain, 2025-2026 only (the devy classes in play).
+[[table]]
+name = "core_cfbd_player_season"
+owner = "cfbd.player_season"
+source = "CFBD stats/player/season?year=<season>"
+grain = "season"
+seasons = "2025-"
+weekly = true
+
+[[table]]
+name = "core_cfbd_player_usage"
+owner = "cfbd.player_usage"
+source = "CFBD player/usage?year=<season>"
+grain = "season"
+seasons = "2025-"
+weekly = true
+
+[[table]]
+name = "core_cfbd_roster"
+owner = "cfbd.roster"
+source = "CFBD roster?year=<season> (height inches, weight lb, class; no birthdate)"
+grain = "season"
+seasons = "2025-"
+weekly = true
+
+[[table]]
+name = "app_devy_roster"
+owner = "app.devy"
+kind = "app"
+note = "the devy rosters as Turon's screenshots show them (app_state/app_devy_roster.csv); MFL devy slots are placeholders and never used"
+
+[[table]]
+name = "devy_identity"
+owner = "devy.identity"
+kind = "builder"
+note = "config/devy_identity.csv (the approved review sheet): as-written cell -> CFBD id, by Turon's approval; never by name"
+
+# PFF college facets (league=ncaa): one whole-season call each; PFF's own ids, never matched to CFBD by name.
+[[table]]
+name = "core_pff_ncaa_passing_season"
+owner = "pff.ncaa_passing_season"
+source = "PFF facet/passing/summary league=ncaa season=N"
+grain = "season"
+seasons = "2025-"
+weekly = true
+[[table]]
+name = "core_pff_ncaa_rushing_season"
+owner = "pff.ncaa_rushing_season"
+source = "PFF facet/rushing/summary league=ncaa season=N"
+grain = "season"
+seasons = "2025-"
+weekly = true
+[[table]]
+name = "core_pff_ncaa_receiving_season"
+owner = "pff.ncaa_receiving_season"
+source = "PFF facet/receiving/summary league=ncaa season=N"
+grain = "season"
+seasons = "2025-"
+weekly = true
+[[table]]
+name = "core_pff_ncaa_defense_season"
+owner = "pff.ncaa_defense_season"
+source = "PFF facet/defense/summary league=ncaa season=N"
+grain = "season"
+seasons = "2025-"
+weekly = true
+[[table]]
+name = "core_pff_ncaa_pass_rush_season"
+owner = "pff.ncaa_pass_rush_season"
+source = "PFF facet/defense/pass_rush league=ncaa season=N"
+grain = "season"
+seasons = "2025-"
+weekly = true
+
+[[table]]
+name = "devy_pff_identity"
+owner = "devy.identity"
+kind = "builder"
+note = "config/devy_pff_identity.csv (Turon's approval of data/devy_pff_review.csv): CFBD id -> PFF college player id; never by name"

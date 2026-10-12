@@ -789,3 +789,35 @@ A week-5 recap cannot be FINAL on Sunday (MFL settles the week after Monday nigh
 - **Commands**: `fdb live-refresh` (fetch + rebuild, posts nothing), `fdb post --mode live [--game HOME:AWAY] [--send]`, `fdb card --mode live`. Sunday sequence: `fdb live-refresh`, then `fdb post --mode live` (dry run), then `--send`.
 - Tests: `tests/test_live_scoring.py` (14); suite 496 OK. Snapshot before migrating: `database/pre_live_20261008.db`.
 - NOT done: no real in-game payload has been loaded yet (the only live probe was pre-kickoff); `fdb rebuild` x2 not re-run after schemas 038-040; nothing is scheduled (the user runs the two commands).
+
+## Phase 14 - CFB / devy tracker (2026-10-10/11)
+Kickoff: `PHASE14_PROMPT.md` (numbered 14: Phases 12 and 13 are the alerts phases). Page: `/devy/` (app/devy.py), reads `mart_devy_*` only.
+
+### Decisions (Turon, in chat)
+- Roster source = his screenshots (4 leagues: 57653 WPB Wallabies `0001`, 60398 Georgetown Hoyas `0061`, 60856 Miami Hurricanes `0005`, 55757 The Undertaker `0003`; the `2026 57563` in a screenshot filename is a typo for 57653). Only the conferences his teams play in were screenshotted. League 55757 holds two copies of every player (two owners per player).
+- **MFL devy roster slots are placeholders** (league-scoped ids, "Last, First", positions mostly QB); replaced when a player is drafted. Never used for mapping. (I first said MFL held no devy players: wrong in detail, same effect.)
+- Age: blank (CFBD and PFF give no birthdate). Draft year: PFF's `eligible_season` / `draft_season`.
+- Identity: no name matching. `data/devy_review.csv` (drafted by `fdb/devy_candidates.py`, candidates only) -> Turon's `approved_cfbd_id` -> `config/devy_identity.csv`, keyed on the as-written cell (text, position, school). 127 cells: 126 mapped, 1 skipped (Deion Smith: CFBD has only an LSU 2021 record). 93 distinct CFBD ids.
+
+### Built
+| Piece | Where |
+|---|---|
+| CFBD loaders (whole season per call; quota is 1,000 calls a month) | `cfbd.player_season`, `cfbd.player_usage`, `cfbd.roster` -> `core_cfbd_*`, schema 041, contracts recorded live. Seasons 2025-2026. 37 usage rows are listed twice by CFBD (empty `conference` on one): collapsed; any duplicate that differs in a number is refused |
+| PFF college loaders | `pff.ncaa_{passing,rushing,receiving,defense,pass_rush}_season` -> `core_pff_ncaa_*_season`, schema 042 (DDL generated from the live 2025 response). `league=ncaa`, bare season call (no preseason in college). Up to 17 games is real (CFP/FCS runs) |
+| Identity builder | `devy.identity` -> `devy_identity`, `devy_pff_identity` (schema 043); checks: one cell never two players, a skip needs a reason, every roster cell has a row, approved ids exist in loaded CFBD/PFF seasons |
+| Marts | `mart_devy_board`, `mart_devy_free_agents`, `mart_devy_player_season`, `_cfbd_stats`, `_bio`, `_usage`, `_pff`. `is_mine` from `my_franchises`. `production_score` is a documented ranking aid |
+| User state | `app_devy_roster` (245 cells, `app_state/app_devy_roster.csv`) |
+| Page | `/devy/`: league, season, view (rostered / free agents), position; mine highlighted, others "owned by", two owners shown for 55757 |
+| Weekly | all 8 loaders `weekly = true`; builder in the registry |
+
+### Gate
+- All 8 loaders idempotent on both seasons. 521 tests OK (25 in `tests/test_devy.py`).
+- `fdb rebuild` x2 -> identical hash `4e627fa4b81aa5e412512f94cc61cdb1f15a0ef027dae7c9afef6a57bd18498d`, 0 network calls (after the PFF links and schemas 044-045; supersedes `7b269619...`). Snapshot before: `database/pre_phase14_20261010.db`.
+- Page checked in the browser: no console errors; 55757 shows each player once with both owners.
+
+### Not done / open
+- **PFF links (2026-10-11):** Turon approved 92 of 93 in `data/devy_pff_review.csv` (`config/devy_pff_identity.csv`); Tyler Van Dyke is unlinked (PFF has no passing record under his name). Four linked players have no 2026 PFF row yet (e.g. Kaleb Jackson, Ahmad Hardy). Free agents can never have a PFF link (no key), so their games played stay blank.
+- **Draft year:** PFF's `eligible_season` is NOT the earliest draft class: for 88 linked 2026 players it is 2 years later than the class-year estimate for 57 and 1 year later for 28 (it looks like the end of college eligibility). Schema 044-045 add `draft_class_est` = season + max(1, 4 - CFBD class year) for every player, shown labelled "est." (a PFF `draft_season` wins when set); PFF's number is its own column "PFF elig.". The estimate ignores redshirts and early declarations.
+- CFBD has no games-played: GP comes only from PFF.
+- No spot check vs CFBD's website yet (gate item 4). The weekly job has not run with the new loaders.
+- Free-agent ranking is season totals (no per-game); FBS conferences only.

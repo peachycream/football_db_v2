@@ -1,0 +1,10 @@
+# Recorded from a live response 2026-10-10 (stats/player/season?year=2026). A missing field fails the load.
+season
+playerId
+player
+position
+team
+conference
+category
+statType
+stat

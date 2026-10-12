@@ -1,0 +1,17 @@
+# Recorded from a live response 2026-10-10 (roster?year=2026). No season field: the request names it. No birthdate.
+id
+firstName
+lastName
+team
+weight
+height
+jersey
+year
+position
+homeCity
+homeState
+homeCountry
+homeLatitude
+homeLongitude
+homeCountyFIPS
+recruitIds

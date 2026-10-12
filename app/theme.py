@@ -104,6 +104,7 @@ APP_ACCENT = {
     "/tendencies/":  "app-model",
     "/def-align/":   "app-model",
     "/cfb-devy/":    "app-model",
+    "/devy/":        "app-model",
 
     "/glossary/":    "app-ref",
     "/playerids/":   "app-ref",

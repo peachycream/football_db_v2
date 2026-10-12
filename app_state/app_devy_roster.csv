@@ -1,0 +1,246 @@
+league_id,franchise_id,franchise_name,line,devy_slot,source_text,position,school_text,seen_on
+55757,0001,Jacob Fatu,1,1,LaNorris Sellers,QB,South Carolina,2026-09-01
+55757,0003,The Undertaker,1,1,Issac Brown,RB,Louisville,2026-09-01
+55757,0003,The Undertaker,1,2,Darius Taylor,RB,Minnesota,2026-09-01
+55757,0003,The Undertaker,1,3,Keelon Russell,QB,Alabama,2026-09-01
+55757,0003,The Undertaker,1,4,Nick Marsh,WR,Indiana,2026-09-01
+55757,0003,The Undertaker,1,5,Colin Simmons,DE,Texas,2026-09-01
+55757,0003,The Undertaker,1,6,Ezavier Crowell,RB,Alabama,2026-09-01
+55757,0003,The Undertaker,1,7,Caleb Hawkins,RB,Oklahoma State,2026-09-01
+55757,0003,The Undertaker,2,1,Mark Fletcher,RB,Miami,2026-09-01
+55757,0003,The Undertaker,2,2,Jaron-Keawe Sagapolutele,QB,Cal,2026-09-01
+55757,0003,The Undertaker,2,3,Ethan Feaster,WR,USC,2026-09-01
+55757,0003,The Undertaker,2,4,Ousmane Kromah,RB,Florida State,2026-09-01
+55757,0003,The Undertaker,2,5,Cederian Morgan,WR,Alabama,2026-09-01
+55757,0005,John Cena,1,1,LaNorris Sellers,QB,South Carolina,2026-09-01
+55757,0005,John Cena,1,2,Justice Haynes,RB,Michigan,2026-09-01
+55757,0005,John Cena,1,3,DJ Lagway,QB,Florida,2026-09-01
+55757,0005,John Cena,1,4,Dakorien Moore,WR,Oregon,2026-09-01
+55757,0005,John Cena,1,5,Ryan Williams,WR,Alabama,2026-09-01
+55757,0005,John Cena,1,6,Malachi Toney,WR,Miami,2026-09-01
+55757,0005,John Cena,1,7,Mark Fletcher,RB,Miami,2026-09-01
+55757,0005,John Cena,2,1,Ezavier Crowell,RB,Alabama,2026-09-01
+55757,0005,John Cena,2,2,Darian Mensah,QB,Miami,2026-09-01
+55757,0005,John Cena,2,3,Mark Bowman,TE,USC,2026-09-01
+55757,0009,Triple H,1,1,Jeremiah Smith,WR,Ohio State,2026-09-01
+55757,0009,Triple H,1,2,TJ Moore,WR,Clemson,2026-09-01
+55757,0009,Triple H,1,3,Micah Hudson,WR,Texas Tech,2026-09-01
+55757,0009,Triple H,1,4,Savion Hiter,RB,Michigan,2026-09-01
+55757,0009,Triple H,1,5,Dylan Stewart,DE,South Carolina,2026-09-01
+55757,0009,Triple H,1,6,Trey'Dez Green,TE,LSU,2026-09-01
+55757,0013,Roman Reigns,1,1,Ahmad Hardy,RB,Missouri,2026-09-01
+55757,0013,Roman Reigns,1,2,Keelon Russell,QB,Alabama,2026-09-01
+55757,0013,Roman Reigns,1,3,Sammy Brown,LB,Clemson,2026-09-01
+55757,0015,Ric Flair,1,1,Chris Henry Jr.,WR,Ohio State,2026-09-01
+55757,0015,Ric Flair,1,2,Tristen Keys,WR,Tennessee,2026-09-01
+55757,0015,Ric Flair,1,3,Donovan Olugbode,WR,Missouri,2026-09-01
+55757,0017,Rowdy Roddy Piper,1,1,Dakorien Moore,WR,Oregon,2026-09-01
+55757,0017,Rowdy Roddy Piper,1,2,Ahmad Hardy,RB,Missouri,2026-09-01
+55757,0017,Rowdy Roddy Piper,1,3,C.J. Carr,QB,Notre Dame,2026-09-01
+55757,0017,Rowdy Roddy Piper,1,4,K.J. Duff,WR,Rutgers,2026-09-01
+55757,0019,Million Dollar Man,1,1,Charlie Becker,WR,Indiana,2026-09-01
+55757,0021,Bray Wyatt,1,1,Arch Manning,QB,Texas,2026-09-01
+55757,0021,Bray Wyatt,1,2,Eric Singleton Jr,WR,Auburn,2026-09-01
+55757,0021,Bray Wyatt,1,3,Dallas Wilson,WR,Florida,2026-09-01
+55757,0021,Bray Wyatt,1,4,Bo Jackson,RB,Ohio State,2026-09-01
+55757,0021,Bray Wyatt,1,5,TJ Moore,WR,Clemson,2026-09-01
+55757,0021,Bray Wyatt,1,6,Ryan Wingo,WR,Texas,2026-09-01
+55757,0021,Bray Wyatt,1,7,Malachi Toney,WR,Miami,2026-09-01
+55757,0021,Bray Wyatt,2,1,Kewan Lacy,RB,Ole Miss,2026-09-01
+55757,0021,Bray Wyatt,2,2,Chris Henry Jr.,WR,Ohio State,2026-09-01
+55757,0021,Bray Wyatt,2,3,Savion Hiter,RB,Michigan,2026-09-01
+55757,0021,Bray Wyatt,2,4,Jeremiah Smith,WR,Ohio State,2026-09-01
+55757,0021,Bray Wyatt,2,5,Cam Coleman,WR,Auburn,2026-09-01
+55757,0021,Bray Wyatt,2,6,Dierre Hill Jr,RB,Oregon,2026-09-01
+55757,0021,Bray Wyatt,2,7,King Miller,RB,USC,2026-09-01
+55757,0021,Bray Wyatt,3,1,Ethan Feaster,WR,USC,2026-09-01
+55757,0021,Bray Wyatt,3,2,Julian Sayin,QB,Ohio State,2026-09-01
+55757,0021,Bray Wyatt,3,3,Mark Bowman,TE,USC,2026-09-01
+55757,0021,Bray Wyatt,3,4,LJ Martin,RB,BYU,2026-09-01
+55757,0021,Bray Wyatt,3,5,Jamari Johnson,TE,Oregon,2026-09-01
+55757,0021,Bray Wyatt,3,6,Andrew Marsh,WR,Michigan,2026-09-01
+55757,0023,The Rock,1,1,Darius Taylor,RB,Minnesota,2026-09-01
+55757,0023,The Rock,1,2,Jadan Baugh,RB,Florida,2026-09-01
+55757,0023,The Rock,1,3,Drew Mestemaker,QB,Oklahoma St,2026-09-01
+55757,0023,The Rock,1,4,Faizon Brandon,QB,Tennessee,2026-09-01
+55757,0025,William Regal,1,1,Jadan Baugh,RB,Florida,2026-09-01
+55757,0025,William Regal,1,2,C.J. Carr,QB,Notre Dame,2026-09-01
+55757,0025,William Regal,1,3,Jamari Johnson,TE,Oregon,2026-09-01
+55757,0027,Bushwhacker Butch,1,1,Bryce Underwood,QB,Michigan,2026-09-01
+55757,0027,Bushwhacker Butch,1,2,Ryan Wingo,WR,Texas,2026-09-01
+55757,0027,Bushwhacker Butch,1,3,Nate Frazier,RB,Georgia,2026-09-01
+55757,0027,Bushwhacker Butch,1,4,Isaac Brown,RB,Louisville,2026-09-01
+55757,0027,Bushwhacker Butch,1,5,Charlie Becker,WR,Indiana,2026-09-01
+55757,0027,Bushwhacker Butch,1,6,Hollywood Smothers,RB,Texas,2026-09-01
+55757,0031,Randy Orton,1,1,DJ Lagway,QB,Florida,2026-09-01
+55757,0031,Randy Orton,1,2,Makhi Hughes,RB,Oregon,2026-09-01
+55757,0031,Randy Orton,1,3,Justice Haynes,RB,Michigan,2026-09-01
+55757,0031,Randy Orton,1,4,Bo Jackson,RB,Ohio State,2026-09-01
+55757,0031,Randy Orton,1,5,Tristen Keys,WR,Tennessee,2026-09-01
+55757,0031,Randy Orton,1,6,Jalen Lott,WR,Oregon,2026-09-01
+55757,0033,Goldberg,1,1,Bryant Wesco,WR,Clemson,2026-09-01
+55757,0033,Goldberg,1,2,Nick Marsh,WR,Indiana,2026-09-01
+55757,0033,Goldberg,1,3,Darian Mensah,QB,Miami,2026-09-01
+55757,0033,Goldberg,1,4,Caleb Hawkins,RB,Oklahoma State,2026-09-01
+55757,0037,Chris Jericho,1,1,Arch Manning,QB,Texas,2026-09-01
+55757,0037,Chris Jericho,1,2,Nate Frazier,RB,Georgia,2026-09-01
+55757,0037,Chris Jericho,1,3,Dante Moore,QB,Oregon,2026-09-01
+55757,0037,Chris Jericho,1,4,Colin Simmons,RB,Texas,2026-09-01
+55757,0037,Chris Jericho,1,5,Dylan Stewart,DE,South Carolina,2026-09-01
+55757,0037,Chris Jericho,1,6,Drew Mestemaker,QB,Oklahoma State,2026-09-01
+55757,0039,Dusty Rhodes,1,1,Cam Coleman,WR,Auburn,2026-09-01
+55757,0039,Dusty Rhodes,1,2,Bryce Underwood,QB,Michigan,2026-09-01
+55757,0039,Dusty Rhodes,1,3,Kewan Lacy,RB,Ole Miss,2026-09-01
+55757,0039,Dusty Rhodes,1,4,Trey'dez Green,TE,LSU,2026-09-01
+55757,0039,Dusty Rhodes,1,5,LJ Martin,RB,BYU,2026-09-01
+55757,0039,Dusty Rhodes,1,6,Omarion Miller,WR,ASU,2026-09-01
+55757,0043,Sheamus,1,1,Ryan Williams,WR,Alabama,2026-09-01
+55757,0043,Sheamus,1,2,Bryant Wesco,WR,Clemson,2026-09-01
+55757,0043,Sheamus,1,3,Dante Moore,QB,Oregon,2026-09-01
+55757,0043,Sheamus,1,4,Julian Sayin,QB,Ohio State,2026-09-01
+55757,0043,Sheamus,1,5,Jaron-Keawe Sagapolutele,QB,Cal,2026-09-01
+57653,0001,WPB Wallabies,1,1,Evan Stewart,WR,Texas A&M,2026-08-31
+57653,0001,WPB Wallabies,1,2,Ryan Williams,WR,Alabama,2026-08-31
+57653,0001,WPB Wallabies,1,3,Darius Taylor,RB,Minnesota,2026-08-31
+57653,0001,WPB Wallabies,1,4,Keelon Russell,QB,Alabama,2026-08-31
+57653,0001,WPB Wallabies,1,5,Isaac Brown,RB,Louisville,2026-08-31
+57653,0001,WPB Wallabies,1,6,Chris Henry,WR,Ohio St,2026-08-31
+57653,0001,WPB Wallabies,1,7,Caleb Hawkins,RB,OK ST,2026-08-31
+57653,0001,WPB Wallabies,1,8,Wayniah Parker,WR,Utah,2026-08-31
+57653,0002,SV Hop Heads,1,1,Tyler Van Dyke,QB,Miami,2026-08-31
+57653,0002,SV Hop Heads,1,2,Brandon Inniss,WR,Ohio St.,2026-08-31
+57653,0002,SV Hop Heads,1,3,Nico Iamaleava,QB,Tenn,2026-08-31
+57653,0002,SV Hop Heads,1,4,Micah Hudson,WR,Texas Tech,2026-08-31
+57653,0002,SV Hop Heads,1,5,Cam Coleman,WR,Auburn,2026-08-31
+57653,0002,SV Hop Heads,1,6,Bryson Washington,RB,Baylor,2026-08-31
+57653,0002,SV Hop Heads,1,7,Savion Hiter,RB,Michigan,2026-08-31
+57653,0002,SV Hop Heads,1,8,Ezavier Crowell,RB,Alabama,2026-08-31
+57653,0002,SV Hop Heads,1,9,Jayce Brown,WR,LSU,2026-08-31
+57653,0003,Boston Battlebots,1,1,Jeremiah Smith,WR,Ohio St,2026-08-31
+57653,0003,Boston Battlebots,1,2,Dylan Raiola,QB,Nebraska,2026-08-31
+57653,0003,Boston Battlebots,1,3,Dylan Stewart,DE,SC,2026-08-31
+57653,0003,Boston Battlebots,1,4,Mark Fletcher Jr,RB,Miami,2026-08-31
+57653,0003,Boston Battlebots,1,5,Ousmane Kromah,RB,Florida State,2026-08-31
+57653,0004,Pittsburgh Primates,1,1,Eugene Wilson,WR,Florida,2026-08-31
+57653,0004,Pittsburgh Primates,1,2,Nate Frazier,RB,Georgia,2026-08-31
+57653,0004,Pittsburgh Primates,1,3,Kaliq Lockett,WR,Texas,2026-08-31
+57653,0004,Pittsburgh Primates,1,4,Tavien St Clair,QB,Ohio State,2026-08-31
+57653,0004,Pittsburgh Primates,1,5,Darian Mensah,QB,Miami,2026-08-31
+57653,0004,Pittsburgh Primates,1,6,Dierre Hill Jr,RB,Oregon,2026-08-31
+57653,0004,Pittsburgh Primates,1,7,Jordon Marshall,RB,Michigan,2026-08-31
+57653,0005,DC Swamp Donkeys,1,1,Dante Moore,QB,UCLA,2026-08-31
+57653,0005,DC Swamp Donkeys,1,2,Jackson Arnold,QB,Oklahoma,2026-08-31
+57653,0005,DC Swamp Donkeys,1,3,Nic Anderson,WR,Oklahoma,2026-08-31
+57653,0005,DC Swamp Donkeys,1,4,LaNorris Sellers,QB,South Carolina,2026-08-31
+57653,0005,DC Swamp Donkeys,1,5,Ryan Wingo,WR,Texas,2026-08-31
+57653,0005,DC Swamp Donkeys,1,6,Sam Leavitt,QB,Arizona State,2026-08-31
+57653,0005,DC Swamp Donkeys,1,7,Charlie Becker,WR,IND,2026-08-31
+57653,0005,DC Swamp Donkeys,1,8,Omarion Miller,WR,ASU,2026-08-31
+57653,0005,DC Swamp Donkeys,1,9,Dallas Wilson,WR,Florida,2026-08-31
+57653,0006,New Haven,1,1,Deion Smith,WR,LSU,2026-08-31
+57653,0006,New Haven,1,2,Bryce Underwood,QB,Michigan,2026-08-31
+57653,0006,New Haven,1,3,Caden Durham,RB,LSU,2026-08-31
+57653,0006,New Haven,1,4,Harlem Berry,RB,LSU,2026-08-31
+57653,0006,New Haven,1,5,Malachi Toney,WR,Miami,2026-08-31
+57653,0006,New Haven,1,6,Hollywood Smothers,RB,Texas,2026-08-31
+57653,0006,New Haven,1,7,Aneyas Williams,RB,Notre Dame,2026-08-31
+57653,0007,Miami Kraken,1,1,Cedric Baxter Jr,RB,Texas,2026-08-31
+57653,0007,Miami Kraken,1,2,Johntay Cook II,WR,Texas,2026-08-31
+57653,0007,Miami Kraken,1,3,DJ Lagway,QB,Florida,2026-08-31
+57653,0007,Miami Kraken,1,4,T.J. Moore,WR,Clemson,2026-08-31
+57653,0007,Miami Kraken,1,5,Colin Simmons,Edge,Texas,2026-08-31
+57653,0007,Miami Kraken,1,6,Jaron-Keawe Sagapolutele,QB,Cal,2026-08-31
+57653,0007,Miami Kraken,1,7,Tristen Keys,WR,Tennessee,2026-08-31
+57653,0007,Miami Kraken,1,8,Keisean Henderson,QB,Houston,2026-08-31
+57653,0008,WV Coal Miners,1,1,Justice Haynes,RB,Alabama,2026-08-31
+57653,0008,WV Coal Miners,1,2,Devin Brown,QB,Ohio St,2026-08-31
+57653,0008,WV Coal Miners,1,3,Makhi Hughes,RB,Oregon,2026-08-31
+57653,0008,WV Coal Miners,1,4,Gideon Davidson,RB,Clemson,2026-08-31
+57653,0008,WV Coal Miners,1,5,"""BO"" Jackson",RB,Ohio State,2026-08-31
+57653,0008,WV Coal Miners,1,6,KJ Duff,WR,Rutgers,2026-08-31
+57653,0008,WV Coal Miners,1,7,Mario Craver,WR,Texas A&M,2026-08-31
+57653,0009,Ontario Mounties,1,1,Malachi Nelson,QB,USC,2026-08-31
+57653,0009,Ontario Mounties,1,2,Kaleb Jackson,RB,LSU,2026-08-31
+57653,0009,Ontario Mounties,1,3,Dakorien Moore,WR,Oregon,2026-08-31
+57653,0009,Ontario Mounties,1,4,Eric Singleton Jr.,WR,Auburn,2026-08-31
+57653,0009,Ontario Mounties,1,5,Ahmad Hardy,RB,Missouri,2026-08-31
+57653,0009,Ontario Mounties,1,6,CJ Carr,QB,Notre Dame,2026-08-31
+57653,0009,Ontario Mounties,1,7,Drew Mestemaker,QB,Oklahoma State,2026-08-31
+57653,0010,Cleveland Steamers,1,1,Arch Manning,QB,Texas,2026-08-31
+57653,0010,Cleveland Steamers,1,2,Duce Robinson,WR/TE,USC,2026-08-31
+57653,0010,Cleveland Steamers,1,3,Julian Sayin,QB,OSU,2026-08-31
+57653,0010,Cleveland Steamers,1,4,Jaden Baugh,RB,Florida,2026-08-31
+57653,0010,Cleveland Steamers,1,5,Jamari Johnson,TE,Oregon,2026-08-31
+57653,0010,Cleveland Steamers,1,6,Kyngstonn Viliamu-Asa,LB,ND,2026-08-31
+57653,0011,Savannah Murder Hornets,1,1,Arik Gilbert,TE,Georgia,2026-08-31
+57653,0011,Savannah Murder Hornets,1,2,Nyck Harbor,WR,SC,2026-08-31
+57653,0011,Savannah Murder Hornets,1,3,Kewan Lacy,RB,Ole miss,2026-08-31
+57653,0011,Savannah Murder Hornets,1,4,Trey'Dez Green,TE,LSU,2026-08-31
+57653,0011,Savannah Murder Hornets,1,5,Derrek Cooper,RB,Texas,2026-08-31
+57653,0012,Motor City Reapers,1,1,Branson Robinson,RB,Georgia,2026-08-31
+57653,0012,Motor City Reapers,1,2,Conner Weigman,QB,Texas A&M,2026-08-31
+57653,0012,Motor City Reapers,1,3,Bryant Wesco,WR,Clemson,2026-08-31
+57653,0012,Motor City Reapers,1,4,Nick Marsh,WR,Michigan State,2026-08-31
+57653,0012,Motor City Reapers,1,5,Jordon Davison,RB,Oregon,2026-08-31
+57653,0012,Motor City Reapers,1,6,Tanook Hines,WR,USC,2026-08-31
+60398,0061,Georgetown Hoyas,1,1,Evan Stewart,WR,Texas A&M,2026-08-08
+60398,0061,Georgetown Hoyas,1,2,Jeramiah Smith,WR,Ohio St,2026-08-08
+60398,0061,Georgetown Hoyas,1,3,Ryan Williams,WR,Alabama,2026-08-08
+60398,0061,Georgetown Hoyas,1,4,Bryant Wesco Jr,WR,Clemson,2026-08-08
+60398,0061,Georgetown Hoyas,1,5,Darius Taylor,RB,Minnesota,2026-08-08
+60398,0061,Georgetown Hoyas,2,1,LaNorris Sellers,QB,SC,2026-08-08
+60398,0061,Georgetown Hoyas,2,2,Keelon Russell,QB,Alabama,2026-08-08
+60398,0061,Georgetown Hoyas,2,3,Cam Coleman,WR,Auburn,2026-08-08
+60398,0061,Georgetown Hoyas,2,4,Malachi Toney,WR,Miami,2026-08-08
+60398,0061,Georgetown Hoyas,2,5,Jadan Baugh,RB,Florida,2026-08-08
+60398,0061,Georgetown Hoyas,3,1,Tristen Keys,WR,Tennessee,2026-08-08
+60398,0061,Georgetown Hoyas,3,2,Isaac Brown,RB,Louisville,2026-08-08
+60398,0061,Georgetown Hoyas,3,3,Bo Jackson,RB,Ohio State,2026-08-08
+60398,0061,Georgetown Hoyas,3,4,Ezavier Crowell,RB,Alabama,2026-08-08
+60398,0061,Georgetown Hoyas,3,5,Savion Hiter,RB,Michigan,2026-08-08
+60398,0061,Georgetown Hoyas,4,1,Ethan Feaster,WR,USC,2026-08-08
+60398,0061,Georgetown Hoyas,4,2,Dylan Stewart,DE,South Carolina,2026-08-08
+60398,0061,Georgetown Hoyas,4,3,Colin Simmons,DE,Texas,2026-08-08
+60398,0061,Georgetown Hoyas,4,4,Trey'Dez Green,TE,LSU,2026-08-08
+60398,0061,Georgetown Hoyas,4,5,DJ Lagway,QB,UF,2026-08-08
+60398,0063,Syracuse Orangemen,1,1,Nico Iamaleava,QB,Tennessee,2026-08-08
+60398,0065,UConn Huskies,1,1,Johntay Cook,WR,Texas,2026-08-08
+60398,0065,UConn Huskies,1,2,Ryan Wingo,WR,Texas,2026-08-08
+60398,0066,Xavier Musketeers,1,1,CJ Carr,QB,Notre Dame,2026-08-08
+60398,0067,St. John's Red Storm,1,1,Nyck Harbor,WR,South Carolina,2026-08-08
+60398,0067,St. John's Red Storm,1,2,Dallas Wilson,WR,Florida,2026-08-08
+60398,0067,St. John's Red Storm,1,3,Nick Marsh,WR,Indiana,2026-08-08
+60398,0067,St. John's Red Storm,1,4,Dierre Hill Jr,RB,Oregon,2026-08-08
+60398,0068,Providence Friars,1,1,Arch Manning,QB,Texas,2026-08-08
+60398,0068,Providence Friars,1,2,Bryce Underwood,QB,Michigan,2026-08-08
+60398,0068,Providence Friars,1,3,Ahmad Hardy,RB,Missouri,2026-08-08
+60398,0068,Providence Friars,1,4,Mark Fletcher,RB,Miami,2026-08-08
+60398,0069,DePaul Blue Demons,1,1,Micah Hudson,WR,Texas Tech,2026-08-08
+60398,0069,DePaul Blue Demons,1,2,Dakorien Moore,WR,Oregon,2026-08-08
+60398,0069,DePaul Blue Demons,1,3,TJ Moore,WR,Clemson,2026-08-08
+60398,0069,DePaul Blue Demons,1,4,Chris Henry Jr.,WR,Ohio State,2026-08-08
+60398,0069,DePaul Blue Demons,1,5,Julian Sayin,QB,OSU,2026-08-08
+60398,0070,Creighton Bluejays,1,1,Kewan Lacy,RB,Ole Miss,2026-08-08
+60398,0070,Creighton Bluejays,1,2,Jamari Johnson,TE,Oregon,2026-08-08
+60856,0002,SMU Mustangs,1,1,Julian Sayin,QB,Ohio State,2026-09-09
+60856,0004,Florida State Seminoles,1,1,Jeramiah Smith,WR,Ohio St,2026-09-09
+60856,0004,Florida State Seminoles,1,2,Jackson Arnold,QB,Oklahoma,2026-09-09
+60856,0004,Florida State Seminoles,1,3,Ryan Williams,WR,Alabama,2026-09-09
+60856,0004,Florida State Seminoles,1,4,Bryant Wesco Jr,WR,Clemson,2026-09-09
+60856,0004,Florida State Seminoles,1,5,Bryce Underwood,QB,Michigan,2026-09-09
+60856,0004,Florida State Seminoles,1,6,Kewan Lacy,RB,Ole Miss,2026-09-09
+60856,0005,Miami Hurricanes,1,1,Evan Stewart,WR,Texas A&M,2026-09-09
+60856,0005,Miami Hurricanes,1,2,Darius Taylor,RB,Minnesota,2026-09-09
+60856,0005,Miami Hurricanes,1,3,Dakorien Moore,WR,Oregon,2026-09-09
+60856,0005,Miami Hurricanes,1,4,Keelon Russell,QB,Bama,2026-09-09
+60856,0005,Miami Hurricanes,1,5,Nick Marsh,WR,Indiana,2026-09-09
+60856,0005,Miami Hurricanes,1,6,Jadan Baugh,RB,Florida,2026-09-09
+60856,0006,Notre Dame Fighting Irish,1,1,Cameron Coleman,WR,Auburn,2026-09-09
+60856,0006,Notre Dame Fighting Irish,1,2,Malachi Toney,WR,Miami,2026-09-09
+60856,0009,North Carolina Tar Heels,1,1,Arch Manning,QB,Texas,2026-09-09
+60856,0019,Virginia Tech Hokies,1,1,Jaron-Keawe Sagapolutele,QB,Cal,2026-09-09
+60856,0030,Georgia Tech Yellow Jackets,1,1,Dante Moore,QB,Oregon,2026-09-09
+60856,0031,Clemson Tigers,1,1,DJ Lagway,QB,Florida,2026-09-09
+60856,0031,Clemson Tigers,1,2,Bo Jackson,RB,Ohio State,2026-09-09
+60856,0031,Clemson Tigers,1,3,Savion Hiter,RB,Michigan,2026-09-09
+60856,0033,Wake Forest Demon Deacons,1,1,Darian Mensah,QB,Miami,2026-09-09
