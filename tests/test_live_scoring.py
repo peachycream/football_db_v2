@@ -77,6 +77,16 @@ class Loader(unittest.TestCase):
             self.assertTrue(any("do not add to the live score" in f for f in fails), fails)
 
 
+class EmptyAnswer(unittest.TestCase):
+    def test_a_league_with_no_matchups_loads_zero_rows_and_does_not_fail(self):
+        """Found 2026-10-12: MFL answered league 60398's liveScoring with no matchups, and the weekly job failed on it."""
+        with LiveEnv() as env:
+            env.seed_all()
+            res = env.live({"version": "1.0", "liveScoring": {"week": "3"}})
+            self.assertTrue(res and all(r["failures"] == [] for r in res), res)
+            self.assertEqual(env.c.execute("SELECT COUNT(*) FROM core_mfl_live_scores").fetchone()[0], 0)
+
+
 class WhichWeek(unittest.TestCase):
     def bases(self, env, now):
         with mock.patch.dict(os.environ, {"FDB_NOW": now}):

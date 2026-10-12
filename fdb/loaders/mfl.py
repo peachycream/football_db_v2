@@ -744,6 +744,11 @@ class LiveScoresLoader(ProjectedScoresLoader):
         live = [w for w in sorted(kick) if w not in done and kick[w] <= now]
         return [Scope(season, "REG", live[0], league=league)] if live else []
 
+    def empty_is_valid(self, conn, scope):
+        """MFL answers some leagues with NO matchups for the week in progress (found 2026-10-12: league 60398 wk5, row_count 0, which
+        failed the weekly job). That is the source's own answer, "nothing to score", not a failed fetch: it loads zero rows."""
+        return True
+
     @staticmethod
     def _games(payload: bytes):
         d = json.loads(payload)["liveScoring"]
@@ -795,7 +800,7 @@ class LiveScoresLoader(ProjectedScoresLoader):
         stray = sorted({r["id"] for r in rows} - known) if known else []
         if stray:
             fails.append(f"{scope.label}: franchises not in core_mfl_franchises: {stray}")
-        if len(rows) < 2:
+        if 0 < len(rows) < 2:   # zero rows is the source's own "nothing to score" (see empty_is_valid); one row has no opponent
             fails.append(f"{scope.label}: only {len(rows)} game rows")
         return fails
 
