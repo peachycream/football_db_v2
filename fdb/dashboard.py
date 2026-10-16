@@ -125,20 +125,30 @@ def route_tree_fails(conn, pending=None) -> list[str]:
     against nflverse's 1,046 (92%) and failed the whole builder, so the Player Dashboard's week-4 tables never updated. The
     floor is therefore scaled to the share of the week's games whose routes ARE charted (15/16 here), and a week with an
     uncharted game is reported as PENDING in `pending`, never as a pass it did not earn. The ceiling and a week with every
-    game charted are unchanged."""
+    game charted are unchanged.
+
+    FTN also charts routes PLAY BY PLAY, so a game it has started charting can stay partial for days (2026 week 5, checked two
+    days after Monday night: 9 of 15 games charted, 405 targets against nflverse's 976). While a season's NEWEST week has any
+    uncharted game its floor is waived (the ceiling stays) and the week is reported as pending; every older week must agree in
+    full, so a real defect is caught as soon as the next week arrives."""
     fails = []
     charted = {(s_, st, w): (n, u) for s_, st, w, n, u in conn.execute("""
         SELECT season, season_type, week, COUNT(*), SUM(routed = 0) FROM
           (SELECT season, season_type, week, gid, SUM(route1 IS NOT NULL AND route1 != '') routed
            FROM core_ftn_participation GROUP BY 1, 2, 3, 4) GROUP BY 1, 2, 3""")}
-    for s_, st, w, a, b in conn.execute("""
+    rows = conn.execute("""
             SELECT r.season, r.season_type, r.week, r.t, n.t FROM
               (SELECT season, season_type, week, SUM(targets) t FROM mart_player_routes_week GROUP BY 1, 2, 3) r
               JOIN (SELECT season, season_type, week, SUM(targets) t FROM core_player_stats GROUP BY 1, 2, 3) n
-                ON n.season = r.season AND n.season_type = r.season_type AND n.week = r.week"""):
+                ON n.season = r.season AND n.season_type = r.season_type AND n.week = r.week""").fetchall()
+    newest = {}
+    for s_, st, w, _, _ in rows:
+        newest[(s_, st)] = max(newest.get((s_, st), w), w)
+    for s_, st, w, a, b in rows:
         n, u = charted.get((s_, st, w), (0, 0))
         share = (n - u) / n if n else 1.0
-        if not 0.95 * b * share <= a <= 1.02 * b:
+        floor = 0.0 if (u and w == newest[(s_, st)]) else 0.95 * b * share
+        if not floor <= a <= 1.02 * b:
             fails.append(f"{s_} {st}{w}: route-tree targets {a} vs nflverse {b}"
                          + (f" ({u} of {n} FTN games have no route charting yet)" if u else ""))
         elif u and pending is not None:

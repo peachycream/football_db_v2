@@ -112,7 +112,7 @@ class DashboardRouteTree(unittest.TestCase):
     """The route-tree check (fdb/dashboard.py route_tree_fails) when FTN has published a game's plays but not its route charting.
     The real case, 2026 week 4: 15 of 16 games charted, 967 route targets against nflverse's 1,046 (92.4%)."""
 
-    def db(self, routed_games, total_games=16, nfl_targets=1046, ftn_targets=967, week=4):
+    def db(self, routed_games, total_games=16, nfl_targets=1046, ftn_targets=967, week=4, later_week=False):
         import sqlite3
         c = sqlite3.connect(":memory:")
         c.row_factory = sqlite3.Row
@@ -121,6 +121,9 @@ class DashboardRouteTree(unittest.TestCase):
                            CREATE TABLE core_ftn_participation (season INT, season_type TEXT, week INT, gid INT, route1 TEXT);""")
         c.execute("INSERT INTO mart_player_routes_week VALUES (2026, 'REG', ?, ?)", (week, ftn_targets))
         c.execute("INSERT INTO core_player_stats VALUES (2026, 'REG', ?, ?)", (week, nfl_targets))
+        if later_week:   # a newer, fully agreeing week: week `week` is no longer the newest
+            c.execute("INSERT INTO mart_player_routes_week VALUES (2026, 'REG', ?, 1000)", (week + 1,))
+            c.execute("INSERT INTO core_player_stats VALUES (2026, 'REG', ?, 1000)", (week + 1,))
         for g in range(total_games):
             for p in range(5):
                 c.execute("INSERT INTO core_ftn_participation VALUES (2026, 'REG', ?, ?, ?)",
@@ -144,10 +147,24 @@ class DashboardRouteTree(unittest.TestCase):
     def test_a_bigger_shortfall_than_the_uncharted_game_explains_still_fails(self):
         from fdb import dashboard
         pending = []
-        fails = dashboard.route_tree_fails(self.db(routed_games=15, ftn_targets=800), pending)   # 76.5% of 1,046
+        fails = dashboard.route_tree_fails(self.db(routed_games=15, ftn_targets=800, later_week=True), pending)   # 76.5% of 1,046
         self.assertEqual(len(fails), 1)
         self.assertIn("1 of 16 FTN games have no route charting yet", fails[0])
         self.assertEqual(pending, [])                                   # a failure is not also a pending note
+
+    def test_the_newest_week_with_uncharted_games_is_not_failed_for_a_partial_charting_shortfall(self):
+        """2026 week 5, two days after Monday night: 9 of 15 games charted and those partial: 405 targets against 976."""
+        from fdb import dashboard
+        pending = []
+        c = self.db(routed_games=9, total_games=15, nfl_targets=976, ftn_targets=405, week=5)
+        self.assertEqual(dashboard.route_tree_fails(c, pending), [])
+        self.assertEqual(len(pending), 1)
+        self.assertIn("route charting pending for 6 of 15 FTN games", pending[0])
+
+    def test_the_ceiling_still_applies_to_the_newest_week(self):
+        from fdb import dashboard
+        c = self.db(routed_games=9, total_games=15, nfl_targets=976, ftn_targets=1100, week=5)
+        self.assertEqual(len(dashboard.route_tree_fails(c, [])), 1)
 
     def test_the_ceiling_is_unchanged_by_uncharted_games(self):
         from fdb import dashboard
