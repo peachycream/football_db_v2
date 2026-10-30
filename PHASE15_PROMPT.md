@@ -63,3 +63,26 @@ A web search (2026-10-30) found PFF's LB / EDGE / DT prospect models (proprietar
 3. Include CB / S, or LB / EDGE / DT only (PFF's own models skip DB).
 4. Budget: confirm CFBD calls (~30) and PFF NCAA reads (~50) for the backfill.
 5. Phase ordering: this does not touch the open items (Discord webhook, Trayanum/Salter overrides, sack-tile gate); run it whenever you choose.
+
+---
+
+## 15a result (2026-10-30, cloud container, read-only; nflverse assets only)
+
+Probe: `draft_picks.csv`, `combine.csv`, `players.csv` from nflverse releases, joined by exact id only. Script kept outside the repo (scratchpad `probe15a.py`); no DB writes, no names in any join. Egress limits: PFF, CFBD and the v2 DB are not reachable/present in the container, so the college half could NOT be measured here.
+
+**NFL side: solid.** 1,148 drafted defenders 2017-2025 (`side = D`).
+- `gsis_id` 1,145/1,148 (99.7%); the 3 missing are rounds 4/7 with 0 games. `pfr_player_id` 100%. No duplicate `gsis_id` / `pfr_player_id` / `cfb_player_id`.
+- Cross-source agreement: `draft_picks.gsis_id` vs `players.pfr_id` -> `gsis_id`: **1,145 agree, 0 disagree**.
+- `players.pff_id` present for 99.7% of them, every position group, every season.
+- Combine (exact `pfr_id` join): 70-90% of players by season; **40-yd time only 48-75%** (2025 lowest, probably early/in-progress or pro-day-only), so athletic features will be NULL for a quarter to half of rows. Combine `draft_year` agrees with `draft_picks.season` on every joined row. The 17 duplicated combine `pfr_id`s are all old (2000s) re-entries and none touch 2017+, but the loader should still refuse duplicate keys.
+- Position vocabulary in `draft_picks`: DE, DT, DL, NT, OLB, ILB, LB, CB, S, SAF, DB. `SAF` (30) and `DB` (133) are not separable into S/CB without a rule; EDGE vs LB for `OLB`/`DE` is ambiguous. Grouping must be decided (use `players.position`/PFF NFL position as the model's own field, not names).
+
+**College side: the finding that changes the plan.** `cfb_player_id` is a **Sports-Reference slug** (94-99% populated, unique). Neither CFBD nor PFF NCAA, the two college sources v2 owns, carries it. So it is **not** a bridge to our college stats. It would only help if we loaded Sports Reference CFB, which is a scrape, not an API; not proposed.
+
+Real candidate bridges, untested:
+1. **PFF NCAA `player_id` = NFL `pff_id`?** `players.pff_id` exists for 99.7% of drafted defenders, so if PFF keeps one id across college and NFL this is an exact bridge for nearly everyone. `core_pff_ncaa_*` also has `draft_season`/`franchise_id`, which can validate it (drafted college rows should carry the draft year and team of the matching NFL player). Design 3.3 says PFF NFL/NCAA ids "legitimately differ" in some cases, so measure it. **Needs the v2 DB (Windows) or a PFF NCAA call.**
+2. **CFBD athlete id:** no native NFL key found in nflverse (`players.csv` has esb/nfl/pfr/pff/otc/espn/smart ids only). CFBD stays reachable only through the reviewed-candidates file or via PFF.
+
+**Gate status: NOT MET, not failed.** The >= 90% college-production reach cannot be computed without PFF NCAA history, which is also not loaded for 2016-2024 (15b). Next action, on Windows: load PFF NCAA 2016-2024 (15b step), then measure `pff_ncaa.player_id` == `players.pff_id` coverage for the drafted-defender list above, and check `draft_season`/`franchise_id` agreement as the exact-key validation. If it clears 90%, the plan stands with PFF as the only college source for the model (CFBD becomes a cross-check). If not, ask Turon about a reviewed-candidates file.
+
+**Decisions this adds:** (6) Accept PFF-only college features (PFF has pass-rush win rate / pressure / coverage, which the research favors over CFBD's box score), with CFBD for TFL/G only if it can be bridged. (7) Since only 48-75% have a 40 time, athletic score needs a missing-indicator and a rule for imputing nothing (RAS from a different source is out of scope).
