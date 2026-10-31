@@ -960,3 +960,31 @@ College row 1,137 (99.3%; lowest class 97.7%); played the season before the draf
 ### Open / carried forward
 - 15e (model and backtest) not started. Open for 15e: pooled years 1-3 vs best single year as the label; position grouping rule (use `nfl_pff_position` with the draft position as the fallback; hybrid EDGE/LB reported, not hidden). The 15e gate (beat the draft-pick-only baseline on pooled out-of-time Spearman, bootstrap CI excluding zero, per shipped position) was fixed before looking.
 - Unchanged: Discord webhook, Trayanum/Salter overrides, sack-tile gate, `REBUILD_HOLDS`.
+
+
+## Phase 15e - IDP prospect model, backtest (2026-10-31, Windows)
+Same session as 15a-15d. Label chosen by Turon: pooled points per game over years 1-3 with a snap floor, plus the top-12 and top-24 flags. CB and S included. The spec (label, floors, groups, models, folds, the gate) is in the docstring of `ops/phase15e_backtest.py`, committed (`e6bf2e1`) BEFORE the first run. The script is read-only and stores nothing; no schema, builder or loader changed, so the DB and its hash are untouched (`3bbeee83...`).
+
+### Result: THE GATE FAILS AT EVERY POSITION. Ship nothing; the model does not beat the draft-pick baseline.
+Population: 901 drafted defenders in the 2017-2023 classes (all three NFL years observed); 60 excluded for having no defender PFF NFL position; 841 kept: CB 202 (148 with a ppg3 label), EDGE 191 (142), DT 154 (118), LB 157 (101), S 137 (101). The label needs >= 300 defensive snaps over years 1-3 (about a quarter of players fall below it and have no ppg3). Rolling origin: test class 2020-2023, train on 2017..N-1; pooled out-of-time players EDGE 86, DT 62, LB 50, S 55, CB 93.
+
+Spearman of the prediction against ppg3 (pooled, out of time), baseline 0 = draft slot only, baseline 1 = + age, height, weight, speed score, 40-yd indicator, model M = baseline 1 + college rates and PFF grades:
+| position | B0 pick | B1 | M | lift M-B0 | 95% CI (paired bootstrap, 2,000) | verdict |
+|---|---|---|---|---|---|---|
+| EDGE | 0.523 | 0.516 | 0.443 | -0.079 | [-0.229, +0.071] | do not ship |
+| DT | 0.439 | 0.361 | 0.352 | -0.087 | [-0.280, +0.101] | do not ship |
+| LB | 0.554 | 0.477 | 0.280 | -0.274 | [-0.553, +0.029] | do not ship |
+| S | 0.578 | 0.485 | 0.441 | -0.137 | [-0.340, +0.075] | do not ship |
+| CB | 0.360 | 0.325 | 0.327 | -0.033 | [-0.205, +0.142] | do not ship |
+Every point estimate of the lift is negative and no interval is above zero. The only interval that excludes zero is B1-B0 for S ([-0.200, -0.009]): adding age and athletic to the pick made it worse. Top-12 / top-24 (AUC, Brier) tell the same story: the draft slot alone is as good as or better than M in almost every cell (e.g. top-24 AUC EDGE 0.803 / 0.785 / 0.736, LB 0.731 / 0.702 / 0.691, S 0.785 / 0.794 / 0.773); DT top-12 AUC is the one cell where M is higher (0.871 vs 0.783) on 3 positives, which is noise. M's predicted top-24 probabilities are roughly calibrated (EDGE, S, CB top quintile 0.41 / 0.56 / 0.50 predicted vs 0.33 / 0.62 / 0.50 realised), but calibration does not rescue it: it adds no rank information over the pick. Coefficient signs (M, fit on every labelled player): `log_pick` is the largest or near-largest in every group (negative: later pick, lower ppg3). College terms are inconsistent across groups (e.g. tackles per game positive for EDGE and LB, PFF defense grade positive in all five, PFF tackle grade negative in four): treat these as unstable, not as findings.
+
+### What this does and does not say
+- The draft slot already explains most of what a rank model can; PFF college rates and grades did not add out-of-time rank information with 50-93 players per position. The intervals are wide (about 0.3), so the data cannot rule out a small lift either; they rule out the lift the research suggests is worth a page.
+- Limits: small samples; labels of class N-1 finish after draft N (a retrospective backtest); the snap floor drops a quarter of players (those who never played are the ones the flags capture, the PPG label does not); PFF college data starts in 2016 so the 2017 class has one observed college season for many; fixed ridge settings, not tuned, by design.
+- Nothing was tuned or re-run after seeing the result. A different spec (other label, other features, a staged position-specific tuning) would be a new pre-registered attempt, not a fix.
+
+### Consequence for the plan
+15f (score the current class, extend `/devy/`) is not ready: the 15e gate says ship nothing, so no model score may be shown. What 15a-15d built stays useful: an exact college-to-NFL bridge, an outcome table and a features mart. Decision for Turon: stop here, or ask for a differently specified attempt, or put a read-only "draft slot + college counts" context table on the page that states plainly that no model beat the draft slot.
+
+### Open / carried forward
+- Unchanged: Discord webhook, Trayanum/Salter overrides, sack-tile gate, `REBUILD_HOLDS`.
