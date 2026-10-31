@@ -22,7 +22,7 @@ class CfbdSeasonLoader(Loader):
     source = "cfbd"
     ext = "json"
     grain = "season"
-    season_range = (2025, 2026)
+    season_range = (2016, 2026)   # Phase 15b: backfill for the prospect model (config.FIRST_SEASON = 2016 is the effective start)
     path = ""
     min_rows = 1
 
@@ -120,12 +120,12 @@ class PlayerUsageLoader(CfbdSeasonLoader):
             if unknown:
                 raise ValueError(f"usage has keys the table lacks: {sorted(unknown)}")
             row = {**{k: v for k, v in r.items() if k != "usage"}, **{f"usage_{k}": u.get(k) for k in USAGE_KEYS}}
-            key = (row["season"], row["id"], row["team"])
+            key = (row["season"], row["id"], row["team"], row.get("position"))   # a player listed at two positions has a usage row for each (Phase 15b)
             old = best.get(key)
             if old is None:
                 best[key] = row
                 continue
-            # CFBD lists some players twice, identical except an empty `conference` (37 of 5,029 in 2026).
+            # CFBD lists some players twice at the SAME position, identical except an empty `conference` (37 of 5,029 in 2026).
             # Collapse only that; a duplicate that differs in any number is a source problem.
             strip = lambda x: {k: v for k, v in x.items() if k != "conference"}
             if strip(old) != strip(row):

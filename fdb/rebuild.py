@@ -13,6 +13,19 @@ from .loaders import get
 from .timeutil import stamp, utcnow
 
 
+# Scopes a rebuild does not replay, each with its reason. Remove an entry once its source is settled; the weekly job
+# reloads the scope (a held scope is absent from the rebuilt DB, never loosened or half-loaded).
+REBUILD_HOLDS: dict[str, tuple[set[tuple[int, str, int]], str]] = {
+    "nflverse.ftn_charting": ({(2026, "REG", 6), (2026, "REG", 7)}, "2026_07_DAL_PHI not charted yet"),
+    "pff.pass_rush_week": ({(2026, "REG", 6), (2026, "REG", 7)}, "wins > opportunities > pass-rush snaps (players 174971, 100612)"),
+    "ftn.participation": ({(2026, "REG", 6), (2026, "REG", 7)}, "game 7125 has plays but no participation"),
+}
+
+
+def held(lid: str, sc) -> bool:
+    return (sc.season, sc.season_type, sc.week) in REBUILD_HOLDS.get(lid, (set(), ""))[0]
+
+
 def export_app_state(conn) -> list[str]:
     config.APP_STATE_DIR.mkdir(parents=True, exist_ok=True)
     out = []
@@ -84,8 +97,11 @@ def build(target) -> tuple[bool, list[str], str]:
     ok = True
     for lid in registry.owners("loader"):
         ld = get(lid)
-        n_ok, fails, no_raw = 0, [], 0
+        n_ok, fails, no_raw, n_held = 0, [], 0, 0
         for sc in fw.scopes(conn, ld):
+            if held(lid, sc):
+                n_held += 1
+                continue
             if fw.raw_for(ld, sc) is None:
                 no_raw += 1  # never fetched: nothing to replay (reported, not an error)
                 continue
@@ -95,6 +111,7 @@ def build(target) -> tuple[bool, list[str], str]:
             else:
                 n_ok += 1
         report.append(f"{lid}: {n_ok} scopes loaded" + (f", {no_raw} with no raw file" if no_raw else "")
+                      + (f", {n_held} HELD ({REBUILD_HOLDS[lid][1]})" if n_held else "")
                       + (f", {len(fails)} FAILED" if fails else ""))
         report.extend("  " + f for f in fails[:10])
         ok = ok and not fails

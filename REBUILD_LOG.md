@@ -824,3 +824,83 @@ Kickoff: `PHASE14_PROMPT.md` (numbered 14: Phases 12 and 13 are the alerts phase
 
 ### Gate after schemas 038-040 and the route-tree change (2026-10-15)
 `fdb rebuild` x2 -> identical content hash `573faad2bb8ae55f4f1d9e7125a7e41e711420a7c2da51425eb68fb0cb416987`, 0 network calls. An earlier pair on 2026-10-14 FAILED (the live DB was left untouched) and was wrongly reported as passed: the exit code read was `tail`'s. Cause: the dashboard route-tree check on week 5 (405 targets vs nflverse 976; FTN had charted 9 of 15 games, partially), which also failed the first unattended weekly run (2026-10-14 05:00 ET, everything else ok). Fix: while a season's NEWEST week has any uncharted FTN game its floor is waived (the ceiling stays) and it is reported as pending; older weeks must agree in full.
+
+
+## Phase 15a - IDP prospect model, bridge probe (2026-10-30, Windows)
+Kickoff: `PHASE15A_WINDOWS.md` (plan: `PHASE15_PROMPT.md`, cloud half of 15a). Question: does PFF NCAA `player_id` equal the NFL `pff_id` for drafted defenders? Measured by exact id only; no name selected or confirmed any match. Script: `ops/phase15a_bridge.py` (read-only; `--list-disagreements`, `--list-missing`).
+
+### Verdict: BRIDGE CLEARS THE FLOOR. PFF NCAA `player_id` == NFL `pff_id`; PFF is the college source for the model.
+Population: 1,148 drafted defenders 2017-2025 (`side = 'D'`); 1,145 have a `gsis_id` and a `players.pff_id`.
+| | drafted | NCAA defense row, any season | season before the draft (feature season) | both facets, feature season |
+|---|---|---|---|---|
+| all | 1,148 | **1,137 (99.0%)** | **1,121 (97.6%)** | 1,081 (94.2%) |
+| 2017 / 18 / 19 | 130 / 128 / 129 | 128 / 125 / 127 | 128 / 123 / 127 | 121 / 118 / 124 |
+| 2020 / 21 / 22 | 124 / 133 / 129 | 124 / 133 / 128 | 123 / 120 / 128 | 120 / 111 / 124 |
+| 2023 / 24 / 25 | 130 / 120 / 125 | 129 / 118 / 125 | 129 / 118 / 125 | 122 / 116 / 125 |
+By position group (any season / feature season): CB 202 (99.0 / 98.0%), DB 133 (98.5 / 97.0), DT 228 (98.7 / 96.5), EDGE 185 (98.9 / 98.9), LB 256 (99.6 / 98.4), S 144 (99.3 / 96.5). The lowest cell is the 2021 class at 90.2% for the feature season (13 of its 133 have an NCAA row in an earlier season but none in 2020; not investigated, 2020 was the COVID-shortened season).
+Group labels are for reporting only (DE=EDGE, DT/DL/NT=DT, OLB/ILB/LB=LB, S/SAF=S, CB, DB); `DB` (133) and `SAF` are not separable by the draft table, and the EDGE/LB split for `OLB` is ambiguous. Grouping is a 15d decision, from `players.position`/PFF NFL position, never names.
+
+**Exact-key validation (PFF NCAA `draft_season` vs `draft_picks.season`):** 3,642 NCAA rows for the 1,137 matched players: **3,642 agree, 0 disagree, 0 unset**. 1,121/1,121 feature-season rows agree. PFF sets `draft_season` on every college row of a drafted player.
+**Reverse checks (NCAA ids that equal an NFL `pff_id` of someone outside the population):**
+- 328 NCAA ids belong to drafted players outside the population: 229 offensive players who played defense in college and 97 defenders drafted after 2025 (2 of the 328 are not in either count; not investigated). PFF `draft_season` minus `draft_picks.season`: 0 for every one of the 326 the difference query returned.
+- 1,503 NCAA ids belong to NFL humans not in `draft_picks` (undrafted free agents). PFF also sets `draft_season` for them (their pro entry class): minus `players.rookie_season` = 0 for 1,441, -1 for 45, -2 for 9, -3/-4/-5 for 6, +1 for 2. None inconsistent with one id space; my first version of this check expected 0 matches with a set year and was wrong about PFF (undrafted players carry a `draft_season`).
+- No NFL human is reached by more than one NCAA id.
+**Not bridged (11 of 1,148):** 3 have no `gsis_id` in `draft_picks` (and so no `pff_id`): 2017 DT, 2023 DT, 2024 DB. 8 have a `pff_id` but no PFF NCAA defense row in any loaded season (2017 EDGE, 2018 DT/EDGE/S, 2019 CB/LB, 2022 DB, 2024 CB; ids `00-0033964, 00-0034760, 00-0034285, 00-0034413, 00-0035598, 00-0034987, 00-0037747, 00-0039789`). Not verified why; PFF NCAA may not chart every sub-FBS school. They are not a bridge failure: no id disagreed.
+**Combine (exact `pfr_id`, `combine.season` = draft year):** 939/1,148 (81.8%) joined; 40-yd time present for 728 (63.4%); by class 70.0-89.5% joined, 48.0% (2025) to 75.4% (2017) with a 40. By group: pct 40-yd EDGE 59.5, LB 63.7, DT 61.4, CB 70.8, S 61.8, DB 62.4. Matches the cloud measurement. Source erratum found: combine `pfr_id` `EdwaMi01` appears in 2013 with `draft_year` 2019 (and in 2019); the join is therefore on `combine.season = draft_picks.season` as well. It is outside the loader's 2016+ duplicate check by design (2013); not loosened.
+
+### PFF NCAA era drift and history depth
+- Probed 2014, 2015, 2016, 2019 (defense and pass rush), after the 2025 contract: **no missing and no new field** in any season. So no era drift in field names.
+- Depth: full-coverage from **2014** (defense 6,180 rows; pass rush 4,635). 2013: 1,663 / 1,180; 2012: 526 / 390; 2010: 563 / 391 (sparse, not FBS-wide); 2007: 0. v2 loads **2016-2026** because `config.FIRST_SEASON = 2016` bounds every loader; a 2014-2015 load would need that constant changed (not done: the 2017 class's feature season is 2016). The earlier college seasons of the 2017 class (2014-2015) are therefore not available; this limits "any season" features, not the feature season.
+- Loaded: defense and pass rush, 2016-2026 (11 scopes each). Rows: defense 6,892 / 6,877 / 7,852 / 9,593 / 7,935 / 11,159 / 11,412 / 11,736 / 11,830 / 12,536 / 11,778 (2026, in season); pass rush 4,960 / 4,913 / 5,662 / 6,936 / 5,879 / 8,246 / 8,266 / 8,486 / 8,497 / 9,000 / 8,377. About 36-40 PFF reads in total: 20 for the load (2025 was cached), 16 for the era and depth probes (2007, 2010, 2012-2016, 2019, both facets), and a few from a dry run that was stopped early.
+
+### Built / changed
+| Piece | Where |
+|---|---|
+| nflverse `draft_picks` + `combine` loaders (snapshot, `weekly = true`) | `fdb/loaders/nflverse_draft.py`, schema `046_core_nflverse_draft.sql`, contracts `nflverse.draft_picks.fields`, `nflverse.combine.fields` (recorded from the live files), registry rows `core_nflverse_draft_picks`, `core_nflverse_combine`. Source `to` (last NFL season) is not stored: it is a SQL keyword the framework does not quote and it is an outcome field the model must never read |
+| Loader checks | no repeated `gsis_id` / `pfr_player_id` / `cfb_player_id` on draft picks since 2016; no `pfr_id` twice within one combine season since 2016; combine `draft_year` equals `draft_picks.season` on the exact `pfr_id` join (0 violations). Pre-2016 repeats are the known combine re-entries |
+| PFF NCAA loaders | `season_range` (2014, 2026) on defense and pass rush only (effective start 2016); `early_min_rows` for seasons <= 2018 (defense 5,000, pass rush 3,500; they chart fewer players) and named `season_floor` for 2020 (defense 7,500, pass rush 5,500; COVID season) instead of a looser tolerance; errata `NO_FRANCHISE_ERRATA = {(2017, 42928)}`: PFF lists one 2017 defender with no team ("Unknown 42928", 268 snaps), skipped by id, any other row without `franchise_id` fails the load. Registry `seasons = "2016-"` for the two tables |
+| Tests | `tests/test_phase15a.py`: 14 tests (loader checks, registry ownership, contracts, season ranges, errata, era floors) |
+
+### Gate
+- Both nflverse tables and both PFF NCAA tables loaded; idempotent (`fdb check --loader ...` all four IDEMPOTENT, last scope); `weekly = true`; registry updated; contracts recorded from live responses. 538 tests OK (was 524). Snapshot before the first write: `database/pre_phase15a_20261030.db`.
+- **`fdb rebuild` x2 identical: MET, with a hold.** The first rebuild (no holds) failed on three 2026 wk6-7 checks in loaders this phase did not touch: `nflverse.ftn_charting` wk7 (`2026_07_DAL_PHI` not charted), `pff.pass_rush_week` wk6 (player 174971) and wk7 (player 100612) with wins > opportunities > pass-rush snaps, `ftn.participation` wk7 (game 7125 has plays but no participation). The live weekly job already ended `failed` on 2026-10-28. At Turon's direction ("create without week 6-7 for now") `fdb/rebuild.py` got `REBUILD_HOLDS`: those three loaders' 2026 REG weeks 6-7 are not replayed, each with its reason, reported as HELD (2 scopes each) - not loosened or half-loaded. Result: rebuild 1 exit 0, rebuild 2 exit 0, 0 network calls both, identical content hash `4bcc8396fa2754ba173a0e85979f20c6c27d587d6a2e7c929f7f2738a953d3e7`; live DB swapped in (snapshot `pre_rebuild_20261031T002143...db`). Consequence: the live DB now lacks those held scopes for those three loaders until the sources settle; remove the `REBUILD_HOLDS` entries then and re-run the weekly job. A rebuild with the entries removed fails today.
+
+### Open / carried forward
+- Discord webhook; Trayanum/Salter overrides; sack-tile gate (unchanged).
+- The rebuild blockers above (three 2026 wk6-7 checks).
+- 15b onward not started. The stored college-to-person mapping (a builder, not a loader) is 15d's job; no mapping written now.
+- Decisions still open for Turon before 15c/15e: outcome label (top-12 / top-24 / PPG, years 1-3 or best of 1-3), CB/S inclusion, treatment of missing 40-yd times (indicator, no imputation), PFF-only college features (CFBD only as a cross-check). The reviewed-candidates question is moot: the exact-key bridge clears 90%.
+
+
+## Phase 15b - IDP prospect model, college history backfill (2026-10-31, Windows)
+Run in the same session as 15a at Turon's explicit direction ("continue with next phase, i override any md"), overriding CLAUDE.md's one-phase-per-session rule.
+
+### Result
+`cfbd.player_season`, `cfbd.player_usage`, `cfbd.roster` and `pff.ncaa_passing/rushing/receiving_season` now load 2016-2024 (plus the existing 2025-2026); defense and pass rush were done in 15a. All eight college tables hold 11 seasons (2016-2026). `config.FIRST_SEASON = 2016` is the effective start (PFF has data from 2014, not loaded). No new facet was added: the defense facet already carries what 15d lists (pass-rush, run-defense and coverage columns); nothing in the PFF facet list was missing.
+
+| table | 2016 / 2017 / 2018 / 2019 / 2020 | 2021 / 2022 / 2023 / 2024 |
+|---|---|---|
+| pff passing | 683 / 694 / 794 / 948 / 757 | 1,102 / 1,118 / 1,144 / 1,137 |
+| pff rushing | 2,085 / 2,143 / 2,450 / 2,892 / 2,373 | 3,413 / 3,439 / 3,523 / 3,547 |
+| pff receiving | 2,911 / 2,943 / 3,374 / 4,057 / 3,374 | 4,747 / 4,831 / 4,870 / 4,866 |
+| cfbd player_season | 81,971 / 85,354 / 89,184 / 87,008 / 61,894 | 89,517 / 109,879 / 105,938 / 108,890 |
+| cfbd player_usage | 3,226 / 3,202 / 3,461 / 3,489 / 2,370 | 3,285 / 4,985 / 4,671 / 4,429 |
+| cfbd roster | 18,041 / 17,894 / 17,902 / 18,732 / 16,423 | 18,633 / 30,388 / 22,365 / 22,794 |
+
+### Era drift and fixes
+- **Field names: no drift.** No loader reported a missing or new field in any of 2016-2024, against the 2025-recorded contracts.
+- **PFF 2020 (COVID season) under the row floors** for passing (757 < 800), rushing (2,373 < 2,500), receiving (3,374 < 3,500): named `season_floor` entries (700 / 2,200 / 3,000) with the reason, not a looser tolerance. Same pattern as 15a's defense and pass rush.
+- **CFBD usage 2021-2024 failed**: a player listed at two positions on one team has a usage row for each (35 keys in 2021, 78 in 2024, 3 and 26 of them with different numbers), and the table's key `(season, id, team)` could not hold both. Fixed at the key: migration `047_cfbd_usage_position_key.sql` rebuilds `core_cfbd_player_usage` with `UNIQUE (season, id, team, position)` (copy, not RENAME, because SQLite's RENAME checks dependent views); the loader keys on position. Same-position duplicates that differ beyond `conference` still fail. `mart_devy_usage` takes `MAX` per `(season, id)`, so a two-position player shows the larger share (the view is unchanged).
+- CFBD usage is offense-only (QB/RB/WR/TE); it is loaded for completeness and is not an input to the IDP model.
+- Plausibility checks (games <= 17, completions <= attempts, usage shares 0..1, heights/weights) ran in every load and passed.
+
+### Gate
+- Row counts above; plausibility checks passed; idempotent: re-applying 2020 and 2024 for all six loaders left the DB hash unchanged; `fdb check --loader` IDEMPOTENT for all six (last scope).
+- `weekly = true` kept on all six (Rule 11: in-season refresh; final seasons come from cache because `raw_is_final` is true before the current season).
+- `fdb rebuild` x2: exit 0 both, 0 network calls both, identical content hash `43154b9dd776ee15d22d436f615a75eb1a119c0a90c4b612141708c898478f4e`, equal to the live DB hash. Still using `REBUILD_HOLDS` for 2026 wk6-7 (see 15a); not touched.
+- 541 tests OK (539 after the 15a rebuild-hold test, plus two 15b tests in `tests/test_phase15a.py`). Snapshot before the first write: `database/pre_phase15b_20261031.db`.
+- Budget: 27 PFF reads (3 facets x 9 seasons) and 33 CFBD calls (27 loads, 4 usage re-fetches after the failed parse saved no raw file, 2 inspection calls of the position duplicates).
+
+### Open / carried forward
+- Unchanged: Discord webhook, Trayanum/Salter overrides, sack-tile gate, the `REBUILD_HOLDS` entries.
+- 15c (NFL outcome table) not started. Decisions still open for Turon before 15c/15e: outcome label, CB/S inclusion, missing 40-yd treatment.

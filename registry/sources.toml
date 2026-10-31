@@ -580,13 +580,13 @@ owner = "alerts.engine"
 kind = "app"
 
 # --- Phase 14: CFB / devy tracker. CFBD (api.collegefootballdata.com, Bearer CFB_API_KEY, 1,000 calls a month:
-# one whole-season call per loader). Season grain, 2025-2026 only (the devy classes in play).
+# one whole-season call per loader). Season grain, 2016- (Phase 15b backfill for the prospect model; the devy classes in play are 2025-2026).
 [[table]]
 name = "core_cfbd_player_season"
 owner = "cfbd.player_season"
 source = "CFBD stats/player/season?year=<season>"
 grain = "season"
-seasons = "2025-"
+seasons = "2016-"
 weekly = true
 
 [[table]]
@@ -594,7 +594,7 @@ name = "core_cfbd_player_usage"
 owner = "cfbd.player_usage"
 source = "CFBD player/usage?year=<season>"
 grain = "season"
-seasons = "2025-"
+seasons = "2016-"
 weekly = true
 
 [[table]]
@@ -602,7 +602,7 @@ name = "core_cfbd_roster"
 owner = "cfbd.roster"
 source = "CFBD roster?year=<season> (height inches, weight lb, class; no birthdate)"
 grain = "season"
-seasons = "2025-"
+seasons = "2016-"
 weekly = true
 
 [[table]]
@@ -623,35 +623,35 @@ name = "core_pff_ncaa_passing_season"
 owner = "pff.ncaa_passing_season"
 source = "PFF facet/passing/summary league=ncaa season=N"
 grain = "season"
-seasons = "2025-"
+seasons = "2016-"
 weekly = true
 [[table]]
 name = "core_pff_ncaa_rushing_season"
 owner = "pff.ncaa_rushing_season"
 source = "PFF facet/rushing/summary league=ncaa season=N"
 grain = "season"
-seasons = "2025-"
+seasons = "2016-"
 weekly = true
 [[table]]
 name = "core_pff_ncaa_receiving_season"
 owner = "pff.ncaa_receiving_season"
 source = "PFF facet/receiving/summary league=ncaa season=N"
 grain = "season"
-seasons = "2025-"
+seasons = "2016-"
 weekly = true
 [[table]]
 name = "core_pff_ncaa_defense_season"
 owner = "pff.ncaa_defense_season"
 source = "PFF facet/defense/summary league=ncaa season=N"
 grain = "season"
-seasons = "2025-"
+seasons = "2016-"
 weekly = true
 [[table]]
 name = "core_pff_ncaa_pass_rush_season"
 owner = "pff.ncaa_pass_rush_season"
 source = "PFF facet/defense/pass_rush league=ncaa season=N"
 grain = "season"
-seasons = "2025-"
+seasons = "2016-"
 weekly = true
 
 [[table]]
@@ -659,3 +659,19 @@ name = "devy_pff_identity"
 owner = "devy.identity"
 kind = "builder"
 note = "config/devy_pff_identity.csv (Turon's approval of data/devy_pff_review.csv): CFBD id -> PFF college player id; never by name"
+
+# Phase 15a (IDP prospect model). Snapshot files, never final, re-fetched every run. Order matters: the combine's
+# draft_year check reads draft_picks.
+[[table]]
+name = "core_nflverse_draft_picks"
+owner = "nflverse.draft_picks"
+source = "nflverse release draft_picks/draft_picks.csv"
+grain = "snapshot"
+weekly = true
+
+[[table]]
+name = "core_nflverse_combine"
+owner = "nflverse.combine"
+source = "nflverse release combine/combine.csv"
+grain = "snapshot"
+weekly = true
