@@ -988,3 +988,9 @@ Every point estimate of the lift is negative and no interval is above zero. The 
 
 ### Open / carried forward
 - Unchanged: Discord webhook, Trayanum/Salter overrides, sack-tile gate, `REBUILD_HOLDS`.
+
+### 15e follow-up (Turon's request): which college stats did the successful players share, by position
+`ops/phase15e_profile.py` (read-only, descriptive, not a model or a gate). Same population as the backtest (841 defenders, classes 2017-2023). For each position and flag (top-12 / top-24 in any of years 1-3) and each of 29-30 stats: median for the successful vs the rest, univariate AUC, and the partial Spearman correlation after removing the draft slot, permutation p-value, Benjamini-Hochberg q within position and flag (about 300 stats-position-flag cells were examined, so q is what counts). Counts of successful players: top-12 EDGE 17, DT 10, LB 15, S 21, CB 28; top-24 EDGE 29, DT 21, LB 29, S 40, CB 47.
+- Survive q < 0.10 after the draft slot: **DT top-12: stops per game (median 2.64 vs 1.93) and PFF overall defense grade (91.3 vs 79.0); LB top-12: stops per game (4.35 vs 3.11) and tackles per game (6.75 vs 5.25).** Nothing survives for EDGE, S or CB, and nothing survives for any position at top-24.
+- Near misses, consistent in direction: EDGE top-12 PFF overall defense grade (87.9 vs 80.2; q 0.102), run-defense grade (83.2 vs 72.8; q 0.102), tackle grade, pressure rate (0.170 vs 0.139) and pass-rush win rate (0.153 vs 0.135); EDGE top-24 speed score (115 vs 104) and sacks per game (0.73 vs 0.58), q 0.46.
+- Caveats: 10-28 successful players per cell; the flag ranks by catch-all points, which are tackle-heavy, so the DT and LB tackle/stop findings may describe role and volume, not a skill the draft slot misses; 126-129 of 191 EDGE have a speed score. These are leads for a NEW pre-registered test, not findings; the 15e gate result stands.
