@@ -994,3 +994,25 @@ Every point estimate of the lift is negative and no interval is above zero. The 
 - Survive q < 0.10 after the draft slot: **DT top-12: stops per game (median 2.64 vs 1.93) and PFF overall defense grade (91.3 vs 79.0); LB top-12: stops per game (4.35 vs 3.11) and tackles per game (6.75 vs 5.25).** Nothing survives for EDGE, S or CB, and nothing survives for any position at top-24.
 - Near misses, consistent in direction: EDGE top-12 PFF overall defense grade (87.9 vs 80.2; q 0.102), run-defense grade (83.2 vs 72.8; q 0.102), tackle grade, pressure rate (0.170 vs 0.139) and pass-rush win rate (0.153 vs 0.135); EDGE top-24 speed score (115 vs 104) and sacks per game (0.73 vs 0.58), q 0.46.
 - Caveats: 10-28 successful players per cell; the flag ranks by catch-all points, which are tackle-heavy, so the DT and LB tackle/stop findings may describe role and volume, not a skill the draft slot misses; 126-129 of 191 EDGE have a speed score. These are leads for a NEW pre-registered test, not findings; the 15e gate result stands.
+
+
+## Phase 15e-2 - second attempt, block-wise features (2026-10-31, Windows)
+Spec: `PHASE15E2_SPEC.md`, committed unchanged (`b20c805`) BEFORE any number here. Script `ops/phase15e2_backtest.py` (`1cc5ad5`), run once, read-only. Mart extension (`ce8ebbf`, migration `050`): the previous college season's counts and grades (1,071 players), the drafting team's previous-season snaps and depth at the player's group (1,140 players; six PFR team spellings added to `team_aliases`, the join is exact and an unmapped code fails the build). `fdb rebuild` x2 identical, hash `e52d28217db987ba678d2690aaccc02476fca6faebce15532288725f175c23ff`, 0 network calls, 546 tests OK.
+
+### Result: THE PRIMARY TEST FAILS AT EVERY POSITION. Ship nothing. The fuller model is worse than the draft slot, significantly so at LB.
+Primary = Spearman(FULL) - Spearman(draft slot) on pooled out-of-time ppg3 (2020-2023 test classes; EDGE 86, DT 62, LB 50, S 55, CB 93 players), bootstrap p, Holm over five positions:
+| position | draft slot | FULL | lift | 95% CI | p | Holm p | verdict |
+|---|---|---|---|---|---|---|---|
+| EDGE | 0.523 | 0.328 | -0.195 | [-0.389, -0.010] | 0.032 | 0.128 | do not ship |
+| DT | 0.439 | 0.375 | -0.063 | [-0.306, +0.177] | 0.604 | 0.604 | do not ship |
+| LB | 0.554 | 0.219 | -0.335 | [-0.583, -0.086] | 0.005 | 0.025 | do not ship |
+| S | 0.578 | 0.400 | -0.178 | [-0.382, +0.050] | 0.118 | 0.354 | do not ship |
+| CB | 0.360 | 0.244 | -0.117 | [-0.272, +0.052] | 0.177 | 0.354 | do not ship |
+Descriptive ablations (Spearman; not a second chance at the gate): P1 athletic EDGE 0.519, DT 0.324, LB 0.415, S 0.385, CB 0.161; P2 role-specific college stats EDGE 0.492, DT 0.490, LB 0.363, S 0.467, CB 0.425; P3 trajectory 0.210 / 0.400 / 0.275 / 0.576 / 0.259; P4 landing spot 0.487 / 0.406 / 0.511 / 0.571 / 0.331. Only P2 for DT (0.490 vs 0.439) and CB (0.425 vs 0.360) sit above the draft slot, and the intervals (about ±0.15-0.25) do not support a claim. More blocks made it worse, which is the signature of overfitting at 50-90 test players and 60-150 training players per position, not a signal that the blocks are useless. Top-12 / top-24 AUC: FULL is below the draft slot in most cells (e.g. S top-12 0.715 vs 0.806, CB top-12 0.499 vs 0.635); the exceptions (EDGE top-24 0.837 vs 0.806, DT top-12 0.847 vs 0.819 on 3 positives) are inside noise.
+
+### Role diagnostic (descriptive, post-draft quantity, not a feature)
+Spearman of (earlier pick) with ppg3, then controlling for year-1 snaps: EDGE 0.489 -> 0.233, DT 0.420 -> 0.224, LB 0.530 -> 0.332, S 0.552 -> 0.418, CB 0.402 -> 0.224. About 25-55% of the draft slot's rank link to production runs through how many snaps a player gets in year 1 (opportunity), most at EDGE, DT and CB. That is the quantitative reason the points label and the draft slot are so tightly tied; it does not show the college stats are uninformative.
+
+### State of 15e / 15f
+Two pre-registered attempts, both failed. The result stands; nothing was tuned or re-run. 15f (score the current class and extend `/devy/`) is not ready for either attempt. What the DB now holds is useful on its own: an exact college-to-NFL bridge, the outcome table, the features mart with trajectory and landing spot.
+Not tried (each its own decision and spec): splitting the label into role (expected tackles / sacks from snaps, `mart_idp_expected_*`) and finishing; modelling year-1 snaps / starter odds as its own target; adding the 2016 class (load PFF NCAA 2015, a `FIRST_SEASON` decision, about +15% players); fewer, pre-selected features per position.
