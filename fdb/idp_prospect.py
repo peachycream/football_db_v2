@@ -169,6 +169,12 @@ PR_FINAL = {"pr_opp": "pass_rush_opp", "pr_wins": "pass_rush_wins", "pr_snaps": 
             "pr_pressures": "total_pressures", "pr_true_opp": "true_pass_set_pass_rush_opp",
             "pr_true_wins": "true_pass_set_pass_rush_wins", "pr_true_snaps": "true_pass_set_snap_counts_pass_rush",
             "pr_grade": "grades_pass_rush_defense"}
+PREV = {"p_games": "player_game_count", "p_snaps_defense": "snap_counts_defense", "p_tackles": "tackles", "p_tfl": "tackles_for_loss",
+        "p_sacks": "sacks", "p_stops": "stops", "p_pressures": "total_pressures", "p_grade_defense": "grades_defense",
+        "p_grade_run_defense": "grades_run_defense", "p_grade_coverage": "grades_coverage_defense",
+        "p_grade_pass_rush": "grades_pass_rush_defense", "p_grade_tackle": "grades_tackle"}
+PFF_NFL_TO_GROUP = {"DI": "DT", "ED": "EDGE", "LB": "LB", "CB": "CB", "S": "S"}
+TEAM_SNAP_FLOOR = 300
 CAREER = {"k_games": "player_game_count", "k_snaps_defense": "snap_counts_defense", "k_tackles": "tackles",
           "k_tfl": "tackles_for_loss", "k_sacks": "sacks", "k_pressures": "total_pressures"}
 
@@ -207,6 +213,34 @@ def _rows_by_player(conn, table):
     return out
 
 
+def _team_resolver(conn):
+    """abbr, season -> canonical team code, through team_aliases (a source's own spelling); None if it is not there."""
+    rows = conn.execute("SELECT abbr, team, season_from, season_to FROM team_aliases").fetchall()
+
+    def resolve(abbr, season):
+        for r in rows:
+            if r["abbr"] == abbr and r["season_from"] <= season <= r["season_to"]:
+                return r["team"]
+        return None
+    return resolve
+
+
+def _team_group_snaps(conn, resolve):
+    """{(season, team, group): (snaps, players with >= TEAM_SNAP_FLOOR snaps)} over REGULAR-season NFL defensive charting."""
+    per = defaultdict(int)
+    for r in conn.execute("""SELECT season, team, position, player_id, SUM(snap_counts_defense) n FROM core_pff_defense_week
+                             WHERE season_type = 'REG' AND snap_counts_defense > 0 GROUP BY season, team, position, player_id"""):
+        g = PFF_NFL_TO_GROUP.get(r["position"])
+        t = resolve(r["team"], r["season"])
+        if g and t:
+            per[(r["season"], t, g, r["player_id"])] += r["n"]
+    out = defaultdict(lambda: [0, 0])
+    for (s, t, g, _), n in per.items():
+        out[(s, t, g)][0] += n
+        out[(s, t, g)][1] += int(n >= TEAM_SNAP_FLOOR)
+    return out
+
+
 def build_features(conn) -> dict:
     if not conn.execute("SELECT 1 FROM core_nflverse_draft_picks LIMIT 1").fetchone():
         conn.execute("DELETE FROM mart_idp_prospect_features")
@@ -215,7 +249,7 @@ def build_features(conn) -> dict:
     closed = _closed_seasons(conn)
     last_closed = max(closed) if closed else None
     pop = conn.execute("""SELECT d.gsis_id, d.season, d.round, d.pick, d.position, d.pfr_player_id, p.pff_id, p.pff_position,
-                                 p.birth_date, p.height, p.college_name, p.college_conference, p.rookie_season
+                                 p.birth_date, p.height, p.college_name, p.college_conference, p.rookie_season, d.team
                           FROM core_nflverse_draft_picks d LEFT JOIN core_nflverse_players p ON p.gsis_id = d.gsis_id
                           WHERE d.side = 'D' AND d.season >= ? AND d.gsis_id IS NOT NULL ORDER BY d.season, d.pick""",
                        (FEATURE_FIRST_DRAFT,)).fetchall()
@@ -226,8 +260,10 @@ def build_features(conn) -> dict:
         combine.setdefault((r["pfr_id"], r["season"]), r)
     dfn, prs = _rows_by_player(conn, "core_pff_ncaa_defense_season"), _rows_by_player(conn, "core_pff_ncaa_pass_rush_season")
 
-    out, conflicts = [], []
-    for gsis, season, rnd, pick, pos, pfr, pff, pff_pos, birth, p_height, college, conf, rook in pop:
+    resolve = _team_resolver(conn)
+    team_snaps = _team_group_snaps(conn, resolve)
+    out, conflicts, unmapped = [], [], set()
+    for gsis, season, rnd, pick, pos, pfr, pff, pff_pos, birth, p_height, college, conf, rook, dteam in pop:
         row = dict.fromkeys(cols)
         cmb = combine.get((pfr, season))
         h = _inches(cmb["ht"]) if cmb else None
@@ -238,6 +274,13 @@ def build_features(conn) -> dict:
                    weight_lb=cmb["wt"] if cmb else None, has_combine=int(cmb is not None),
                    has_forty=int(bool(cmb and cmb["forty"] is not None)), college_name=college, college_conference=conf,
                    conference_tier=_tier(conf))
+        team = resolve(dteam, season) if dteam else None
+        if dteam and team is None:
+            unmapped.add(dteam)
+        row["draft_team"] = team
+        grp = PFF_NFL_TO_GROUP.get(pff_pos)
+        if team and grp and (season - 1, team, grp) in team_snaps:
+            row["t_group_snaps_prev"], row["t_group_players_prev"] = team_snaps[(season - 1, team, grp)]
         if cmb:
             for k in ("forty", "bench", "vertical", "broad_jump", "cone", "shuttle"):
                 row[k] = cmb[k]
@@ -258,6 +301,14 @@ def build_features(conn) -> dict:
                        age_at_college_season=_age(birth, f"{fs}-09-01"), college_position=d["position"])
             for k, c in DEF_FINAL.items():
                 row[k] = d[c]
+            prev = dfn[pid].get(fs - 1)
+            if prev is not None:
+                row["p_season"] = fs - 1
+                for k, c in PREV.items():
+                    row[k] = prev[c]
+                prp = prs.get(pid, {}).get(fs - 1)
+                if prp is not None:
+                    row["p_pr_opp"], row["p_pr_wins"] = prp["pass_rush_opp"], prp["pass_rush_wins"]
             pr = prs.get(pid, {}).get(fs)
             if pr is not None:
                 row["has_pass_rush"] = 1
@@ -274,15 +325,19 @@ def build_features(conn) -> dict:
         conn.execute("DELETE FROM mart_idp_prospect_features")
         conn.executemany(f"INSERT INTO mart_idp_prospect_features ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})", out)
         fails = feature_checks(conn, len(pop), last_closed)
+        fails += [f"draft team code {t!r} is not in team_aliases" for t in sorted(unmapped)]
         fails += [f"{g} ({s}): players row predates the draft, not in ID_CONFLICT_ERRATA" for g, s in conflicts if (g, s) not in ID_CONFLICT_ERRATA]
         conn.execute("ROLLBACK" if fails else "COMMIT")
     except Exception:
         conn.execute("ROLLBACK")
         raise
+    n_prev = sum(1 for r in out if r[cols.index("p_season")] is not None)
+    n_team = sum(1 for r in out if r[cols.index("t_group_snaps_prev")] is not None)
     n_col = sum(1 for r in out if r[cols.index("has_college")])
     n_cmb = sum(1 for r in out if r[cols.index("has_combine")])
     return {"failures": fails, "summary": f"{len(out)} drafted defenders {FEATURE_FIRST_DRAFT}+ ({skipped} without gsis_id skipped), "
-                                          f"{n_col} with college rows, {n_cmb} with a combine row, {len(conflicts)} id conflict(s) {sorted(conflicts)}"}
+                                          f"{n_col} with college rows, {n_cmb} with a combine row, {len(conflicts)} id conflict(s) {sorted(conflicts)}, "
+                                          f"{n_prev} with a previous college season, {n_team} with landing-spot counts"}
 
 
 def feature_checks(conn, n_players, last_closed) -> list[str]:
@@ -305,6 +360,14 @@ def feature_checks(conn, n_players, last_closed) -> list[str]:
                        "OR height_in NOT BETWEEN 60 AND 85").fetchall()
     if bad:
         fails.append(f"{len(bad)} rows with implausible games, age or height, e.g. {[tuple(r) for r in bad[:3]]}")
+    bad = conn.execute("SELECT COUNT(*) FROM mart_idp_prospect_features WHERE p_season IS NOT NULL AND "
+                       "(p_season != college_season - 1 OR college_seasons < 2 OR p_season >= draft_season - 1)").fetchone()[0]
+    if bad:
+        fails.append(f"{bad} rows with a previous college season that is not before the final one")
+    bad = conn.execute("SELECT COUNT(*) FROM mart_idp_prospect_features WHERE t_group_snaps_prev IS NOT NULL AND "
+                       "(draft_team IS NULL OR t_group_snaps_prev < 0 OR t_group_players_prev > 30)").fetchone()[0]
+    if bad:
+        fails.append(f"{bad} rows with implausible landing-spot counts")
     for s, n, c in conn.execute("SELECT draft_season, COUNT(*), SUM(has_college) FROM mart_idp_prospect_features "
                                 "GROUP BY draft_season ORDER BY 1"):
         if last_closed and s <= last_closed and c < MIN_COLLEGE_COVERAGE * n:

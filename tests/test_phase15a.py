@@ -196,3 +196,14 @@ class IdpProspectFeaturesTest(unittest.TestCase):
         self.assertIn("idp_prospect.features", BUILDERS)
         self.assertIn("idp_prospect.features", registry.owners("builder"))
         self.assertEqual(ip.ID_CONFLICT_ERRATA, {("WOO547869", 2026)})
+
+
+class Phase15e2FeaturesTest(unittest.TestCase):
+    def test_pfr_team_spellings_resolve_exactly(self):
+        from fdb import config, db
+        c = db.connect(config.DB_PATH)
+        al = {r[0]: r[1] for r in c.execute("SELECT abbr, team FROM team_aliases WHERE season_to = 9999")}
+        for abbr, team in (("GNB", "GB"), ("KAN", "KC"), ("NOR", "NO"), ("NWE", "NE"), ("SFO", "SF"), ("TAM", "TB")):
+            self.assertEqual(al.get(abbr), team)
+        self.assertEqual(c.execute("SELECT COUNT(*) FROM mart_idp_prospect_features WHERE p_season IS NOT NULL AND "
+                                   "p_season != college_season - 1").fetchone()[0], 0)
