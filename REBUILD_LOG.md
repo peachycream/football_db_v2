@@ -924,3 +924,39 @@ League 30590 (the catch-all league): Spearman DT 0.966 (n=194), DE 0.964 (178), 
 ### Open / carried forward
 - 15d (features mart) not started. Unchanged: Discord webhook, Trayanum/Salter overrides, sack-tile gate, `REBUILD_HOLDS`.
 - `season_is_closed` uses the clock; a season counts as observed once its Super Bowl is final. Rebuilds after the 2026 Super Bowl will add 2026 years; the table is expected to change then.
+
+
+## Phase 15d - IDP prospect model, features mart (2026-10-31, Windows)
+Same session as 15a-15c, at Turon's explicit direction. Missing combine values stay NULL with indicators (Turon's decision), nothing imputed.
+
+### Built
+- `mart_idp_prospect_features` (schema `049`), builder `idp_prospect.features` (`fdb/idp_prospect.py`, registry row, runs in `fdb weekly`). One row per drafted defender (exact `gsis_id`), classes 2017-2026 (2016's feature season, 2015, is not loaded): 1,267 rows, 4 draft picks without a `gsis_id` skipped.
+- Pre-draft only: draft round and overall pick, the draft table's position, `players.pff_position` (the model's grouping field), age at draft (April 25 of the draft year, from `players.birth_date`), height (combine, else `players.height`, with `height_source`), weight (combine only: the NFL-listed weight is in-career), forty / bench / vertical / broad / cone / shuttle, `has_combine` / `has_forty`, college name / conference / tier (P5 / G5 / OTHER by conference name).
+- College: the player's latest PFF NCAA season <= draft_season - 1 (`college_season`, `college_season_gap`), with `college_seasons`, `first_college_season`, `left_censored` (first season is 2016, the first loaded), age at that season, college position, the final season's defense counts (games, snaps by alignment, tackles, assists, missed tackles, TFL, stops, sacks, hits, hurries, pressures, PBU, INT, FF, targets, receptions, coverage yards), the PFF grades stored as given, the pass-rush row (opportunities, wins, snaps, pressures and the true-pass-set versions), and career sums over every loaded season (games, snaps, tackles, TFL, sacks, pressures, pass-rush opportunities and wins). Counts only; per-game and per-snap rates, speed score and snap-weighted pooling are read-time (Rule 4). CFBD is not used (not bridgeable; PFF-only decision 6).
+- Not stored: anything the NFL career produced (the draft table's games / w_av / def_sacks, `players.rookie_season` / `last_season`).
+
+### Coverage (classes 2017-2025, 1,142 players)
+College row 1,125 (98.5%; every class >= 95%); played the season before the draft 1,131 of the 1,142 with a row in some season (gap 0 for the large majority; a gap of 1 is an injury or COVID-affected year); pass-rush row 1,125; combine row 938 (class range 70-90%); 40-yd time 76 / 66 / 63 / 59 / 53 / 48 % on the older classes down to 2025's 48% (see the class table below); `left_censored` for 128 of 129 in the 2017 class down to 0 from 2023. By draft position group: CB 202 (college 200), DB 132 (131), DT 226 (225), EDGE (DE) 185 (183), OLB 41 (41), LB 215 (214), S 144 (143). 2026 class: 122 rows, 97 with college rows (the rest have no `pff_id` in `players` yet), no combine rows loaded yet. Conference tier: P5 986, G5 187, OTHER 58, unknown 36.
+| class | rows | college | pass rush | combine | 40-yd |
+|---|---|---|---|---|---|
+| 2017 | 129 | 128 | 121 | 115 | 98 |
+| 2018 | 128 | 125 | 120 | 104 | 87 |
+| 2019 | 129 | 127 | 124 | 108 | 87 |
+| 2020 | 124 | 124 | 121 | 111 | 83 |
+| 2021 | 133 | 133 | 121 | 103 | 89 |
+| 2022 | 129 | 128 | 124 | 103 | 75 |
+| 2023 | 129 | 129 | 122 | 91 | 71 |
+| 2024 | 119 | 118 | 116 | 100 | 77 |
+| 2025 | 125 | 125 | 125 | 103 | 60 |
+
+### Errata
+`ID_CONFLICT_ERRATA = {("WOO547869", 2026)}`: the 2026 draft table gives Peter Woods (Clemson DT, pick 29) the `gsis_id` WOO547869, which `players.csv` holds for a different person (rookie 1980, born 1955, Missouri); joining it gave an age of 70. A drafted player whose players row has a `rookie_season` before the draft is an identity conflict: the players-derived fields (pff_id, pff position, age, college, conference) are dropped, not guessed; draft and combine facts stay. Any conflict outside the named set fails the build. Found by the plausibility check (age 19-30), not loosened.
+
+### Gate
+- No-leakage check (in the builder, rolls back on failure): every college season <= draft_season - 1, `college_season_gap` >= 0, `first_college_season` <= `college_season`; indicator and data agree; games <= 17 and career >= final-season games; age 19-30 and height 60-85 in; every closed class has >= 90% college coverage. All pass.
+- Join coverage per position reported above; `mart_` only, no loader change.
+- `fdb rebuild` x2: exit 0 both, 0 network calls, identical content hash `3bbeee83ff9eb3eecca8dc711dafbfc8f97db4790a50ccb6035825df884b3737`, equal to the live DB. Still using `REBUILD_HOLDS` (15a). 545 tests OK.
+
+### Open / carried forward
+- 15e (model and backtest) not started. Open for 15e: pooled years 1-3 vs best single year as the label; position grouping rule (use `nfl_pff_position` with the draft position as the fallback; hybrid EDGE/LB reported, not hidden). The 15e gate (beat the draft-pick-only baseline on pooled out-of-time Spearman, bootstrap CI excluding zero, per shipped position) was fixed before looking.
+- Unchanged: Discord webhook, Trayanum/Salter overrides, sack-tile gate, `REBUILD_HOLDS`.

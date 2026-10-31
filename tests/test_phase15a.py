@@ -178,3 +178,21 @@ class IdpProspectOutcomeTest(unittest.TestCase):
         from fdb.builders import BUILDERS
         self.assertIn("idp_prospect.outcomes", BUILDERS)
         self.assertIn("idp_prospect.outcomes", registry.owners("builder"))
+
+
+class IdpProspectFeaturesTest(unittest.TestCase):
+    def test_helpers(self):
+        from fdb import idp_prospect as ip
+        self.assertEqual(ip._inches("6-2"), 74)
+        self.assertIsNone(ip._inches(None))
+        self.assertEqual(ip._age("2000-04-25", "2022-04-25"), 22.0)
+        self.assertIsNone(ip._age(None, "2022-04-25"))
+        self.assertEqual((ip._tier("Southeastern Conference"), ip._tier("Conference USA"), ip._tier("Ivy League"), ip._tier(None)),
+                         ("P5", "G5", "OTHER", None))
+
+    def test_builder_registered_and_the_id_conflict_is_a_named_exception(self):
+        from fdb import idp_prospect as ip, registry
+        from fdb.builders import BUILDERS
+        self.assertIn("idp_prospect.features", BUILDERS)
+        self.assertIn("idp_prospect.features", registry.owners("builder"))
+        self.assertEqual(ip.ID_CONFLICT_ERRATA, {("WOO547869", 2026)})
