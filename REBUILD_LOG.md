@@ -904,3 +904,23 @@ Run in the same session as 15a at Turon's explicit direction ("continue with nex
 ### Open / carried forward
 - Unchanged: Discord webhook, Trayanum/Salter overrides, sack-tile gate, the `REBUILD_HOLDS` entries.
 - 15c (NFL outcome table) not started. Decisions still open for Turon before 15c/15e: outcome label, CB/S inclusion, missing 40-yd treatment.
+
+
+## Phase 15c - IDP prospect model, NFL outcome table (2026-10-31, Windows)
+Same session as 15a/15b, at Turon's explicit direction. Decisions recorded from Turon: outcome flags top-12 AND top-24; CB and S included; missing 40-yd times stay NULL (15d/15e). Not yet decided: years 1-3 pooled vs best single year (per-year rows are stored, so 15e chooses).
+
+### Built
+- `mart_idp_prospect_outcome` (schema `048`), builder `idp_prospect.outcomes` (`fdb/idp_prospect.py`, registry row, runs in `fdb weekly` with the other builders). One row per drafted defender (`core_nflverse_draft_picks` side D, exact `gsis_id`) per NFL season in years 1-3 that is closed: `games`, `snaps`, `points`, `position_group`, `finish`, `group_players`, `top12`, `top24`, `years_observed` (right-censoring on every row). A year with no defensive snap is a row with games = 0.
+- Points = league 30590's catch-all rules (`fdb/scoring.py`, additive per position) applied to each PLAYER-WEEK's counts from `mart_player_allowed_week` (REG only), summed per season. The league's 2026 rule set is applied to every season so all seasons share one scale. Counts stored, nothing averaged (Rule 4). Finish = rank of season points within the group-season (group = PFF position with the most snaps; ties share the best rank). The draft table's own career columns (games, w_av, def_sacks) are never read.
+- Population: 1,272 drafted defenders, 2016-2025 classes (3 without a `gsis_id` skipped), 3,447 player-years, 2,845 with a snap. Classes 2016-2023 have 3 observed years, 2024 has 2, 2025 has 1. Top-12 / top-24 player-years by group (years with a snap): CB 50/86 of 698, S 33/59 of 462, DE 26/52 of 610, LB 24/49 of 521, DT 18/47 of 554.
+- Checks (roll back on failure): player count equals the drafted-defender count, plausible games/snaps/finish, season and `years_observed` agree with the draft year, finish within the group size, newest class has exactly one observed year. A bare DB with no draft picks builds empty (the rebuild tests' seed).
+
+### Gate: reconciliation against MFL's reported points, 2025 (`ops/phase15c_reconcile.py`, read-only, exact ids)
+League 30590 (the catch-all league): Spearman DT 0.966 (n=194), DE 0.964 (178), LB 0.976 (163), CB 0.968 (182), S 0.966 (154); median reported/predicted 0.91-1.11. **GATE MET (>= 0.95 per position).** League 55757 also passes (0.965-0.977). League 46276 does not (0.85-0.94, reported/predicted 3.4-5.2): a different scoring set, not the catch-all league, so not part of the gate; any league-specific scoring is a read-time job, not this table's.
+
+### Gate: rebuild
+`fdb rebuild` x3 (the third after a test-driven fix to the empty-seed case): all exit 0, 0 network calls, identical content hash `5145bcd4f8f8beb1e514578410ba2b2142b11beb29058e73ccb77d75cb323f87`, equal to the live DB. Still using `REBUILD_HOLDS` (15a). 543 tests OK (two failed on the first full run because the builder refused a bare seed DB; fixed, not loosened).
+
+### Open / carried forward
+- 15d (features mart) not started. Unchanged: Discord webhook, Trayanum/Salter overrides, sack-tile gate, `REBUILD_HOLDS`.
+- `season_is_closed` uses the clock; a season counts as observed once its Super Bowl is final. Rebuilds after the 2026 Super Bowl will add 2026 years; the table is expected to change then.

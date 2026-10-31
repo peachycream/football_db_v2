@@ -162,3 +162,19 @@ class Phase15bTest(unittest.TestCase):
         self.assertEqual(sorted(r["position"] for r in rows), ["RB", "WR"])
         with self.assertRaises(ValueError):
             PlayerUsageLoader().parse(json.dumps([data[0], {**data[0], "usage": {**u, "overall": 0.9}}]).encode())
+
+
+class IdpProspectOutcomeTest(unittest.TestCase):
+    def test_finish_ranks_within_group_and_ties_share_the_best_rank(self):
+        from fdb import idp_prospect as ip
+        rows = {(2024, "pff:1"): {"group": "LB", "points": 100.0}, (2024, "pff:2"): {"group": "LB", "points": 100.0},
+                (2024, "pff:3"): {"group": "LB", "points": 50.0}, (2024, "pff:4"): {"group": "S", "points": 10.0}}
+        fin = ip._finishes(rows)
+        self.assertEqual(fin[(2024, "LB")], {"pff:1": (1, 3), "pff:2": (1, 3), "pff:3": (3, 3)})
+        self.assertEqual(fin[(2024, "S")], {"pff:4": (1, 1)})
+
+    def test_builder_is_registered_and_owns_the_mart(self):
+        from fdb import registry
+        from fdb.builders import BUILDERS
+        self.assertIn("idp_prospect.outcomes", BUILDERS)
+        self.assertIn("idp_prospect.outcomes", registry.owners("builder"))

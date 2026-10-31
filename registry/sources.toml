@@ -461,6 +461,13 @@ name = "mart_idp_sack_rates"
 owner = "idp_model.build"
 kind = "builder"
 
+# Phase 15c: NFL outcomes of drafted defenders, years 1-3 (fdb/idp_prospect.py). Exact gsis_id; catch-all points from counts.
+[[table]]
+name = "mart_idp_prospect_outcome"
+owner = "idp_prospect.outcomes"
+kind = "builder"
+note = "years 1-3 catch-all IDP points, snaps, games, position finish per drafted defender 2016+; years_observed marks right-censoring"
+
 # DD Fantasy Football Trinity (fdb/ddff.py; member login in .env). 2021+, REG weeks 1-17: where the site's pickers start/stop.
 [[table]]
 name = "core_trinity_ftn_aggregates"
