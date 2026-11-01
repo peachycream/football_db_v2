@@ -1057,3 +1057,21 @@ Every estimate is negative; nothing ships. Descriptive blocks (uncorrected): sco
 - Three attempts, three failures at every position: draft slot is hard to beat with 50-93 out-of-time players per position. 15f (score the current class) stays off.
 - Not specced: predicting playing time or starter odds (draft slot's link to ppg3 runs mostly through year-1 snaps, 15e-2), splitting role from finishing, CFBD play-level data (quota), the 2016 class.
 - Rebuild x2: exit 0, 0 network calls, identical content hash `c8e716f330356ed5df7c8652738fe38df437dd2a3561830c34542d338d71985a`, equal to the live DB. 550 tests OK. Nothing pushed.
+
+## Phase 15e-4 - fourth attempt, playing time (2026-11-01, Windows)
+Spec `PHASE15E4_SPEC.md` committed unchanged (`b532647`) BEFORE any number here. Script `ops/phase15e4_backtest.py` (`59fc7c7`), run once, seed 15, read-only; no loader, migration or rebuild. Target `snaps3` (sum of snaps years 1-3, zero years included, no floor); 841 players, test classes 2020-2023.
+
+### Result: THE PRIMARY TEST FAILS AT EVERY POSITION. Ship nothing. Draft-day team context adds no rank information about snaps beyond the draft slot.
+Spearman vs snaps3, PRIMARY-S (log pick + team group snaps and players last season + nickel/dime share + same-class earlier picks at the group) minus draft slot, Holm over five positions:
+| position | n | draft slot | PRIMARY-S | lift | 95% CI | p | Holm p |
+|---|---|---|---|---|---|---|---|
+| EDGE | 117 | 0.628 | 0.618 | -0.010 | [-0.052, +0.034] | 0.589 | 1.000 |
+| DT | 86 | 0.518 | 0.527 | +0.008 | [-0.116, +0.137] | 0.848 | 1.000 |
+| LB | 83 | 0.620 | 0.538 | -0.083 | [-0.155, -0.023] | 0.004 | 0.020 |
+| S | 79 | 0.580 | 0.574 | -0.006 | [-0.080, +0.072] | 0.828 | 1.000 |
+| CB | 127 | 0.560 | 0.495 | -0.064 | [-0.132, +0.001] | 0.054 | 0.216 |
+Descriptive, uncorrected: the college block (P-C, `c_grade_defense`, snaps per game) lifts DT +0.077 (p 0.225), S +0.020, and is below the slot at EDGE, LB and CB (CB -0.051, p 0.043); none supports a claim. A better snaps rank does not carry to points: PRIMARY-S is at or below the slot against points3 and ppg3 in almost every cell. AUC of "900+ snaps in 3 years" is below the slot at every position (EDGE 0.827 to 0.819, LB 0.810 to 0.781, CB 0.770 to 0.733). The narrow EDGE and S intervals (about +-0.05 to +-0.08) mean a lift of 0.10 or more is ruled out there.
+
+### Decisions
+- The draft slot already prices the team situation we can see on draft day. Four attempts (college stats, blocks, CFBD scouting and recruiting, team context) have not beaten it; the "playing time from draft-day information" route is closed for these features. No tuning, no re-run.
+- 15f (score the current class) stays off: no model passed. Untested: post-draft information (free-agent and trade moves, veteran depth), the forward year-N to year-N+1 model, Stage 2 (points per snap given a role), the 2016 class.
