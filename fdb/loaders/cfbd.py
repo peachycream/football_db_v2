@@ -175,4 +175,82 @@ class RosterLoader(CfbdSeasonLoader):
         return fails
 
 
-LOADERS = (PlayerSeasonLoader, PlayerUsageLoader, RosterLoader)
+def _nested_json(r):
+    h = r.get("hometownInfo")
+    return {**r, "hometownInfo": json.dumps(h, sort_keys=True) if h is not None else None}
+
+
+class DraftPicksLoader(CfbdSeasonLoader):
+    """Phase 15e-3. One call a draft year. `hometownInfo` (nested) is kept as JSON text; `year` is checked equal to the request."""
+    id = "cfbd.draft_picks"
+    endpoint = "draft_picks"
+    table = "core_cfbd_draft_picks"
+    path = "/draft/picks"
+    season_range = (2017, 2026)
+    min_rows = 200   # 253-262 a year (7 rounds); 2022 had 262
+    warn_new_fields = False
+
+    def parse(self, payload):
+        data = self._rows(payload)
+        return sorted({k for r in data for k in r}), [_nested_json(r) for r in data]
+
+    def scope_rows(self, rows, scope):
+        bad = [r for r in rows if r.get("year") != scope.season]
+        if bad:
+            raise ValueError(f"{scope.label}: payload holds draft year {bad[0].get('year')}")
+        return rows
+
+    def checks(self, conn, scope):
+        fails = super().checks(conn, scope)
+        s = scope.season
+        n, hi, lo = conn.execute("SELECT COUNT(*), MAX(overall), MIN(overall) FROM core_cfbd_draft_picks WHERE season = ?", (s,)).fetchone()
+        if n and (lo != 1 or hi != n):
+            fails.append(f"{scope.label}: {n} picks but overall runs {lo}..{hi} (gap or duplicate)")
+        bad = conn.execute("SELECT COUNT(*) FROM core_cfbd_draft_picks WHERE season = ? AND (round NOT BETWEEN 1 AND 7 OR "
+                           "preDraftGrade NOT BETWEEN 1 AND 100)", (s,)).fetchone()[0]
+        if bad:
+            fails.append(f"{scope.label}: {bad} picks with a round outside 1..7 or a grade outside 1..100")
+        dup = conn.execute("SELECT COUNT(*) FROM (SELECT collegeAthleteId FROM core_cfbd_draft_picks WHERE season = ? AND collegeAthleteId "
+                           "IS NOT NULL GROUP BY collegeAthleteId HAVING COUNT(*) > 1)", (s,)).fetchone()[0]
+        if dup:
+            fails.append(f"{scope.label}: {dup} college athlete ids drafted twice in one year")
+        graded = conn.execute("SELECT COUNT(preDraftGrade) FROM core_cfbd_draft_picks WHERE season = ?", (s,)).fetchone()[0]
+        if n and graded < 0.6 * n:
+            fails.append(f"{scope.label}: only {graded} of {n} picks carry a pre-draft grade")
+        return fails
+
+
+class RecruitingPlayersLoader(CfbdSeasonLoader):
+    """Phase 15e-3. One call a recruiting class. `athleteId` is blank for some recruits; the join to the roster is `recruitIds` on `id`."""
+    id = "cfbd.recruiting_players"
+    endpoint = "recruiting_players"
+    table = "core_cfbd_recruiting_players"
+    path = "/recruiting/players"
+    season_range = (2012, 2022)
+    extra_seasons = (2012, 2013, 2014, 2015)   # below config.FIRST_SEASON: a 2017-2019 draftee was recruited in 2013-2015
+    min_rows = 1500   # 4,413 in the 2020 class
+    warn_new_fields = False
+
+    def parse(self, payload):
+        data = self._rows(payload)
+        ids = [r["id"] for r in data]
+        if len(ids) != len(set(ids)):
+            raise ValueError(f"{self.id}: a recruit id appears twice in one class")
+        return sorted({k for r in data for k in r}), [_nested_json(r) for r in data]
+
+    def scope_rows(self, rows, scope):
+        bad = [r for r in rows if r.get("year") != scope.season]
+        if bad:
+            raise ValueError(f"{scope.label}: payload holds class {bad[0].get('year')}")
+        return rows
+
+    def checks(self, conn, scope):
+        fails = super().checks(conn, scope)
+        bad = conn.execute("SELECT COUNT(*) FROM core_cfbd_recruiting_players WHERE season = ? AND (stars NOT BETWEEN 0 AND 5 OR "
+                           "rating NOT BETWEEN 0 AND 1 OR ranking < 1)", (scope.season,)).fetchone()[0]
+        if bad:
+            fails.append(f"{scope.label}: {bad} recruits with stars outside 0..5, a rating outside 0..1 or a ranking below 1")
+        return fails
+
+
+LOADERS = (PlayerSeasonLoader, PlayerUsageLoader, RosterLoader, DraftPicksLoader, RecruitingPlayersLoader)

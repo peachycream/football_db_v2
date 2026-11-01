@@ -207,3 +207,83 @@ class Phase15e2FeaturesTest(unittest.TestCase):
             self.assertEqual(al.get(abbr), team)
         self.assertEqual(c.execute("SELECT COUNT(*) FROM mart_idp_prospect_features WHERE p_season IS NOT NULL AND "
                                    "p_season != college_season - 1").fetchone()[0], 0)
+
+
+class Phase15e3Test(unittest.TestCase):
+    """Phase 15e-3: CFBD draft picks, recruiting players, the bridge and the new feature columns (synthetic rows, one temp DB)."""
+
+    def setUp(self):
+        self.env = TempEnv()
+        self.env.__enter__()
+        self.c = self.env.conn()
+
+    def tearDown(self):
+        self.env.__exit__(None, None, None)
+
+    def _cfbd_pick(self, season, overall, athlete, team, grade=80):
+        lid = _load_id(self.c)
+        self.c.execute("INSERT INTO core_cfbd_draft_picks (season, collegeAthleteId, nflTeam, year, overall, round, preDraftRanking, "
+                       "preDraftPositionRanking, preDraftGrade, load_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                       (season, athlete, team, season, overall, 1, overall, 1, grade, lid))
+
+    def _nfl_pick(self, season, pick, gsis, team):
+        lid = _load_id(self.c)
+        self.c.execute("INSERT INTO core_nflverse_draft_picks (season, round, pick, team, gsis_id, side, load_id) VALUES (?,?,?,?,?,?,?)",
+                       (season, 1, pick, team, gsis, "D", lid))
+
+    def _roster(self, season, pid, recruit_ids):
+        lid = _load_id(self.c)
+        self.c.execute("INSERT INTO core_cfbd_roster (season, id, team, recruitIds, load_id) VALUES (?,?,?,?,?)",
+                       (season, pid, "State", json.dumps(recruit_ids), lid))
+
+    def _recruit(self, season, rid, athlete, stars=4):
+        lid = _load_id(self.c)
+        self.c.execute("INSERT INTO core_cfbd_recruiting_players (season, id, athleteId, year, ranking, stars, rating, load_id) "
+                       "VALUES (?,?,?,?,?,?,?,?)", (season, rid, athlete, season, 50, stars, 0.9, lid))
+
+    def test_registry_and_contracts(self):
+        for lid, table in (("cfbd.draft_picks", "core_cfbd_draft_picks"), ("cfbd.recruiting_players", "core_cfbd_recruiting_players"),
+                           ("idp_prospect.cfbd_bridge", "mart_idp_prospect_cfbd_bridge")):
+            registry.assert_owner(lid, table)
+        self.assertIn("preDraftGrade", LOADERS["cfbd.draft_picks"]().expected_fields())
+        self.assertIn("recruitType", LOADERS["cfbd.recruiting_players"]().expected_fields())
+        self.assertEqual(LOADERS["cfbd.recruiting_players"].extra_seasons, (2012, 2013, 2014, 2015))
+
+    def test_bridge_joins_on_season_and_overall_pick_and_rejects_a_team_contradiction(self):
+        from fdb.idp_cfbd import build_bridge
+        self._nfl_pick(2020, 5, "00-1", "GNB")   # PFR spelling resolves to GB
+        self._nfl_pick(2020, 6, "00-2", "NYJ")
+        self._nfl_pick(2020, 7, "00-3", "LAR")   # the Rams
+        self._cfbd_pick(2020, 5, 111, "Green Bay")
+        self._cfbd_pick(2020, 6, 222, "New York")
+        self._cfbd_pick(2020, 7, 333, "Seattle")   # contradicts
+        res = build_bridge(self.c)
+        got = {r["gsis_id"]: r["draft_status"] for r in self.c.execute("SELECT gsis_id, draft_status FROM mart_idp_prospect_cfbd_bridge")}
+        self.assertEqual(got, {})   # nothing written: the contradiction fails the build and rolls back
+        self.assertTrue(any("team contradiction" in f for f in res["failures"]))
+
+    def test_recruit_by_exact_roster_id_and_rejections(self):
+        from fdb.idp_cfbd import bridge_checks, build_bridge
+        for i, (aid, team) in enumerate(((10, "Atlanta"), (11, "Atlanta"), (12, "Atlanta"), (13, "Atlanta"), (14, "Atlanta"))):
+            self._nfl_pick(2021, 20 + i, f"00-{i}", "ATL")
+            self._cfbd_pick(2021, 20 + i, aid, team)
+        self._roster(2019, "10", ["r10"]); self._recruit(2016, "r10", "10")                       # ok
+        self._roster(2019, "11", ["r11a", "r11b"]); self._recruit(2016, "r11a", "11")              # two recruit ids: not used
+        self._roster(2019, "12", ["r12"])                                                          # recruit not loaded
+        self._roster(2019, "13", ["r13"]); self._recruit(2016, "r13", "999")                       # the recruit names another athlete
+        self._roster(2021, "14", ["r14"]); self._recruit(2016, "r14", "14")                        # roster row is not before the draft year - 1
+        build_bridge(self.c)
+        st = {r["gsis_id"]: (r["recruit_status"], r["rec_stars"]) for r in
+              self.c.execute("SELECT gsis_id, recruit_status, rec_stars FROM mart_idp_prospect_cfbd_bridge")}
+        self.assertEqual(st["00-0"], ("ok", 4))
+        self.assertEqual(st["00-1"][0], "multi_recruit_id")
+        self.assertEqual(st["00-2"][0], "recruit_not_loaded")
+        self.assertEqual(st["00-3"][0], "athlete_disagrees")
+        self.assertEqual(st["00-4"][0], "no_roster_recruit_id")
+
+    def test_gate_fails_below_95_percent(self):
+        from fdb.idp_cfbd import bridge_checks
+        lid = _load_id(self.c)
+        self.c.executemany("INSERT INTO mart_idp_prospect_cfbd_bridge (gsis_id, draft_season, draft_pick, draft_status, recruit_status) "
+                           "VALUES (?,?,?,?,?)", [(f"g{i}", 2020, i, "ok" if i < 90 else "no_cfbd_pick", "no_bridge") for i in range(100)])
+        self.assertTrue(any("bridge gate" in f for f in bridge_checks(self.c, {2020: 100})))

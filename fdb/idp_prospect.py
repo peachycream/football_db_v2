@@ -175,6 +175,7 @@ PREV = {"p_games": "player_game_count", "p_snaps_defense": "snap_counts_defense"
         "p_grade_pass_rush": "grades_pass_rush_defense", "p_grade_tackle": "grades_tackle"}
 PFF_NFL_TO_GROUP = {"DI": "DT", "ED": "EDGE", "LB": "LB", "CB": "CB", "S": "S"}
 TEAM_SNAP_FLOOR = 300
+CFBD_STATS = {"TOT": "cf_tackles", "TFL": "cf_tfl", "SACKS": "cf_sacks", "QB HUR": "cf_hurries", "PD": "cf_pd"}   # core_cfbd_player_season, category 'defensive'
 CAREER = {"k_games": "player_game_count", "k_snaps_defense": "snap_counts_defense", "k_tackles": "tackles",
           "k_tfl": "tackles_for_loss", "k_sacks": "sacks", "k_pressures": "total_pressures"}
 
@@ -262,6 +263,10 @@ def build_features(conn) -> dict:
 
     resolve = _team_resolver(conn)
     team_snaps = _team_group_snaps(conn, resolve)
+    bridge = {r["gsis_id"]: r for r in conn.execute("SELECT * FROM mart_idp_prospect_cfbd_bridge")}
+    cfbd_stats = defaultdict(lambda: defaultdict(float))   # (CFBD playerId, season) -> {statType: sum over the player's teams}
+    for r in conn.execute("SELECT playerId, season, statType, stat FROM core_cfbd_player_season WHERE category = 'defensive'"):
+        cfbd_stats[(r["playerId"], r["season"])][r["statType"]] += r["stat"] or 0
     out, conflicts, unmapped = [], [], set()
     for gsis, season, rnd, pick, pos, pfr, pff, pff_pos, birth, p_height, college, conf, rook, dteam in pop:
         row = dict.fromkeys(cols)
@@ -318,6 +323,18 @@ def build_features(conn) -> dict:
                 row[k] = sum((dfn[pid][s][c] or 0) for s in seasons)
             row["k_pr_opp"] = sum((prs[pid][s]["pass_rush_opp"] or 0) for s in seasons if s in prs.get(pid, {}))
             row["k_pr_wins"] = sum((prs[pid][s]["pass_rush_wins"] or 0) for s in seasons if s in prs.get(pid, {}))
+        b = bridge.get(gsis)
+        if b is not None and b["draft_status"] == "ok":
+            row.update(cfbd_athlete_id=b["cfbd_athlete_id"], dp_pre_rank=b["dp_pre_rank"], dp_pre_pos_rank=b["dp_pre_pos_rank"],
+                       dp_pre_grade=b["dp_pre_grade"], has_recruit=int(b["recruit_status"] == "ok"), rec_year=b["rec_year"],
+                       rec_stars=b["rec_stars"], rec_rating=b["rec_rating"], rec_ranking=b["rec_ranking"], has_cfbd_stats=0)
+            st = cfbd_stats.get((b["cfbd_athlete_id"], row["college_season"])) if row["college_season"] is not None else None
+            if st is not None:
+                row["has_cfbd_stats"] = 1
+                for k, c in CFBD_STATS.items():
+                    row[c] = st.get(k)
+        else:
+            row["has_recruit"], row["has_cfbd_stats"] = 0, 0
         out.append(tuple(row[c] for c in cols))
 
     conn.execute("BEGIN")
@@ -364,6 +381,11 @@ def feature_checks(conn, n_players, last_closed) -> list[str]:
                        "(p_season != college_season - 1 OR college_seasons < 2 OR p_season >= draft_season - 1)").fetchone()[0]
     if bad:
         fails.append(f"{bad} rows with a previous college season that is not before the final one")
+    bad = conn.execute("SELECT COUNT(*) FROM mart_idp_prospect_features WHERE (has_recruit = 0 AND rec_stars IS NOT NULL) OR "
+                       "(has_recruit = 1 AND (rec_year IS NULL OR rec_year > draft_season - 1)) OR (has_cfbd_stats = 0 AND cf_tackles IS NOT NULL) "
+                       "OR (has_cfbd_stats = 1 AND (cfbd_athlete_id IS NULL OR cf_tackles < 0 OR cf_tackles > 250 OR cf_sacks > 30))").fetchone()[0]
+    if bad:
+        fails.append(f"{bad} rows with an implausible or leaking CFBD column (recruit class, tackles or sacks)")
     bad = conn.execute("SELECT COUNT(*) FROM mart_idp_prospect_features WHERE t_group_snaps_prev IS NOT NULL AND "
                        "(draft_team IS NULL OR t_group_snaps_prev < 0 OR t_group_players_prev > 30)").fetchone()[0]
     if bad:

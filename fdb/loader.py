@@ -60,6 +60,7 @@ class Loader:
     grain: str = ""          # 'snapshot' | 'reference' | 'season' | 'week'
     ext: str = "json"
     season_range: tuple[int, int] | None = None   # e.g. (2016, 2025) when the source stops
+    extra_seasons: tuple[int, ...] = ()           # season grain: seasons BELOW config.FIRST_SEASON this loader also offers (Phase 15e-3: recruiting classes 2012-2015)
     warn_new_fields: bool = True                  # False when the table deliberately keeps a subset
     fetches: bool = True          # False: reads the raw file another loader fetched (same source/endpoint)
     raw_retention: str = "keep3"  # non-final raw kept per partition: 'keep3' | 'daily' (newest per UTC day)
@@ -177,6 +178,8 @@ def scopes(conn: sqlite3.Connection, loader: Loader, seasons: list[int] | None =
         found = [s for s in loader.reference_seasons(rows) if s >= config.FIRST_SEASON]
     else:
         found = [s for s in schedule.seasons_loaded(conn) if s >= config.FIRST_SEASON]
+    if loader.extra_seasons:
+        found = sorted(set(found) | set(loader.extra_seasons))
     if seasons:
         found = [s for s in found if s in seasons]
     if loader.season_range:

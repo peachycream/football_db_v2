@@ -1,0 +1,18 @@
+# Recorded from a live response 2026-10-31 (recruiting/players?year=2020). A missing field fails the load.
+id
+athleteId
+recruitType
+year
+ranking
+name
+school
+committedTo
+position
+height
+weight
+stars
+rating
+city
+stateProvince
+country
+hometownInfo

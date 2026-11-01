@@ -1,0 +1,20 @@
+# Recorded from a live response 2026-10-31 (draft/picks?year=2022). A missing field fails the load.
+collegeAthleteId
+nflAthleteId
+collegeId
+collegeTeam
+collegeConference
+nflTeamId
+nflTeam
+year
+overall
+round
+pick
+name
+position
+height
+weight
+preDraftRanking
+preDraftPositionRanking
+preDraftGrade
+hometownInfo
