@@ -1028,3 +1028,32 @@ Spec fetched from `api-docs.json` (CFBD v5.33.2, 93 paths); account is the Free 
 - **Not available on the Free tier (HTTP 401):** `/wepa/*` (team, passing, rushing, kicking), `/games/weather`, `/scoreboard`. `/games/schedule` returned 400 (a parameter this survey did not supply). Live play-by-play is off on this tier and was not probed. A few calls returned a transient 503.
 - **`/draft/picks`** (works with `year`; the survey's first filter was wrong): fields `collegeAthleteId`, `nflAthleteId`, `collegeId`, `collegeTeam`, `nflTeam`, `year`, `overall`, `round`, `pick`, `name`, `position`, height, weight, pre-draft grade and rankings. Found with data for 2004 and every probed year after.
 - **A CFBD-to-NFL bridge exists for drafted players** (tested 2017-2025, no names selecting anything): CFBD `/draft/picks` joins nflverse `core_nflverse_draft_picks` on (year, overall pick) for 2,312 of 2,312 picks; the CFBD team name maps to the nflverse team code consistently (33 pairs, at most two per team, i.e. relocations). Of the 1,148 drafted defenders, 1,144 have a positive `collegeAthleteId` and 1,111 of those (96.8%) are in the loaded CFBD tables. `nflAthleteId` matches no nflverse id column (0-1 hits except `pff_id` 89 of 2,565, a coincidence of numeric ranges) and is not used. This reverses 15a's statement that CFBD has no bridge for drafted players. It has not been built (a builder, not a loader, and not in scope here).
+
+## Phase 15e-3 - third attempt, CFBD scouting and recruiting (2026-10-31, Windows)
+Spec `PHASE15E3_SPEC.md` committed unchanged as 9de31eb (Turon approved); code and backtest script committed as bd6a1e5 before the run. One run, seed 15.
+
+### Built
+- Loaders `cfbd.draft_picks` (2017-2026, 10 calls) and `cfbd.recruiting_players` (classes 2012-2022, 11 calls), schema 051, contracts recorded live, idempotent, rebuild replays from raw. `extra_seasons` (new Loader attribute) offers the 2012-2015 recruiting classes below `config.FIRST_SEASON`. About 23 CFBD calls in all (2 probes, the rest loads); the quota had reset at 2026-11-01 00:00 UTC.
+- Bridge builder `idp_prospect.cfbd_bridge` (`fdb/idp_cfbd.py`, mart `mart_idp_prospect_cfbd_bridge`) and the E/F/G columns in the features mart (schema 052; numbering differs from the spec's "051"). Snapshot before the first write: `database/pre_phase15e3_20261031.db`.
+- Recruiting `athleteId` is NOT empty in the loaded data (about 59% in the 2020 class); it is used only to reject: a recruit row naming a different athlete (0 cases).
+
+### Bridge gate: PASSED
+1,265 of 1,267 drafted defenders 2017-2026 get a CFBD athlete id (2 have none: one each in 2018 and 2024); 0 team contradictions. A first run showed 45 "contradictions": my own team table spelled the Rams LAR while the DB's canonical code is LA; fixed in the table, not a tolerance. Recruit found for 834 (66%): 364 have no recruit id on any roster row up to the draft year - 1, 67 name a recruit outside the loaded classes (JUCO or other class years); 0 multi-id, 0 athlete disagreements. Scouting grade present for about 90% (2019 and 2020 least, 82-87%).
+
+### Primary result: FAILED at every position (no tuning)
+PRIMARY = log pick + scouting (grade, position rank, reach, indicator) + recruiting (stars, rating, log rank, indicator); 9 features (the spec's "at most 8" miscounted its own list; the listed features were run). Spearman lift vs draft slot, Holm over five positions:
+
+| Position | n | B0 | PRIMARY | Lift | p | Holm |
+|---|---|---|---|---|---|---|
+| EDGE | 86 | 0.523 | 0.441 | -0.082 | 0.036 | 0.144 |
+| DT | 62 | 0.439 | 0.296 | -0.142 | 0.024 | 0.120 |
+| LB | 50 | 0.554 | 0.433 | -0.121 | 0.116 | 0.348 |
+| S | 55 | 0.578 | 0.501 | -0.077 | 0.173 | 0.348 |
+| CB | 93 | 0.360 | 0.311 | -0.049 | 0.174 | 0.348 |
+
+Every estimate is negative; nothing ships. Descriptive blocks (uncorrected): scouting alone and recruiting alone are also below draft slot at every position (EDGE recruiting -0.071, p 0.010; LB recruiting -0.148, p 0.018), CFBD college counts alone beat draft slot only at CB (+0.024, not significant). Top-12/top-24 AUC does not improve (EDGE top-12 0.769 to 0.648). The scouting grade is nearly the draft slot (Spearman 0.83-0.91 with the pick), so it adds noise, not information. The provenance risk in the spec is moot: no lift to explain.
+
+### Decisions and open
+- Three attempts, three failures at every position: draft slot is hard to beat with 50-93 out-of-time players per position. 15f (score the current class) stays off.
+- Not specced: predicting playing time or starter odds (draft slot's link to ppg3 runs mostly through year-1 snaps, 15e-2), splitting role from finishing, CFBD play-level data (quota), the 2016 class.
+- Rebuild x2: exit 0, 0 network calls, identical content hash `c8e716f330356ed5df7c8652738fe38df437dd2a3561830c34542d338d71985a`, equal to the live DB. 550 tests OK. Nothing pushed.
