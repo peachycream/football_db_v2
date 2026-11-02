@@ -264,6 +264,7 @@ def build_features(conn) -> dict:
     resolve = _team_resolver(conn)
     team_snaps = _team_group_snaps(conn, resolve)
     bridge = {r["gsis_id"]: r for r in conn.execute("SELECT * FROM mart_idp_prospect_cfbd_bridge")}
+    ras_bridge = {r["gsis_id"]: r for r in conn.execute("SELECT * FROM mart_idp_prospect_ras_bridge")}
     cfbd_stats = defaultdict(lambda: defaultdict(float))   # (CFBD playerId, season) -> {statType: sum over the player's teams}
     for r in conn.execute("SELECT playerId, season, statType, stat FROM core_cfbd_player_season WHERE category = 'defensive'"):
         cfbd_stats[(r["playerId"], r["season"])][r["statType"]] += r["stat"] or 0
@@ -335,6 +336,10 @@ def build_features(conn) -> dict:
                     row[c] = st.get(k)
         else:
             row["has_recruit"], row["has_cfbd_stats"] = 0, 0
+        rb = ras_bridge.get(gsis)
+        row["has_ras"] = 0
+        if rb is not None and rb["ras_status"] == "ok":
+            row.update(has_ras=1, ras=rb["ras"], ras_yd10=rb["ras_yd10"], ras_yd20=rb["ras_yd20"], ras_yd40=rb["ras_yd40"])
         out.append(tuple(row[c] for c in cols))
 
     conn.execute("BEGIN")
@@ -386,6 +391,11 @@ def feature_checks(conn, n_players, last_closed) -> list[str]:
                        "OR (has_cfbd_stats = 1 AND (cfbd_athlete_id IS NULL OR cf_tackles < 0 OR cf_tackles > 250 OR cf_sacks > 30))").fetchone()[0]
     if bad:
         fails.append(f"{bad} rows with an implausible or leaking CFBD column (recruit class, tackles or sacks)")
+    bad = conn.execute("SELECT COUNT(*) FROM mart_idp_prospect_features f WHERE (has_ras = 0 AND (ras IS NOT NULL OR ras_yd10 IS NOT NULL "
+                       "OR ras_yd20 IS NOT NULL OR ras_yd40 IS NOT NULL)) OR (has_ras = 1 AND NOT EXISTS (SELECT 1 FROM "
+                       "mart_idp_prospect_ras_bridge b WHERE b.gsis_id = f.gsis_id AND b.ras_status = 'ok')) OR has_ras IS NULL").fetchone()[0]
+    if bad:
+        fails.append(f"{bad} rows whose RAS columns disagree with an accepted bridge row")
     bad = conn.execute("SELECT COUNT(*) FROM mart_idp_prospect_features WHERE t_group_snaps_prev IS NOT NULL AND "
                        "(draft_team IS NULL OR t_group_snaps_prev < 0 OR t_group_players_prev > 30)").fetchone()[0]
     if bad:

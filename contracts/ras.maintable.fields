@@ -1,0 +1,10 @@
+# Recorded from the live table headers 2026-11-01 (ras.football Main Table, staged by ops/ras_stage.py). A missing field fails the load.
+YEAR
+PICK
+RD
+POS
+RAS
+10YD
+20YD
+40YD
+TEAM

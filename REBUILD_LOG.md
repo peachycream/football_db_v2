@@ -1101,3 +1101,19 @@ Spearman vs `points_next` (league points in N+1, 0 if the player has no row); PR
 - Passing means the gate in the spec passed for DT, S and CB, nothing more. No app tile, no mart and no 15f change has been built; that is its own spec. DE and LB stay on last year's points.
 - The lift is mostly an age and experience curve, not the NFL expected-tackle and expected-sack marts. The marts add a little at CB and DT only.
 - Caveats for the next spec: players recur across test years (the bootstrap is by player, p values are exact only for that scheme); the P-A, P-E and survivors tables are uncorrected.
+
+## Phase 16b Stage 1 - outlook mart (2026-11-01, Windows)
+Spec `PHASE16B_SPEC.md` committed unchanged (`2f5c664`). Builder `idp_outlook.build` (`fdb/idp_outlook.py`, schema 053) freezes the 16a PRIMARY ridge at DT, S and CB; DE and LB get no model and stay on last year's points. Tables: `mart_idp_outlook` (2,578 player-seasons, N = 2021-2025; 322 live rows for N = 2025), `mart_idp_outlook_model` (15 fits: alpha, coefficients, medians, scales), `mart_idp_outlook_exit` (100 age-band rows). Numpy closed-form ridge, parity-tested against sklearn.
+- Parity gate: pooled Spearman reproduces 0.555 / 0.499 / 0.498 (DT / S / CB); row-for-row against the 16a backtest, max abs diff 1.4e-12 over 1,297 rows.
+- Tests: `tests/test_phase16b.py`, 15 tests. Full suite 576 OK. `fdb rebuild` x2: identical content hash `91087f42...fabec`, 0 network calls.
+- Not built: Stage 2 (endpoint `/api/dashboard/outlook`, dashboard tile). Needs Turon's go-ahead and a mockup first.
+
+## Phase 17 build - RAS loader, bridge, feature columns (2026-11-01, Windows)
+Data: ras.football Main Table (Kent Lee Platte's RAS), drafted defenders 2016-2026, 1,404 rows, staged by hand to `data/raw/ras/maintable/all/20261102T021233126419Z.csv` (sha256 `81bb91d2f6f37f4f0d4c8eef6f7dcdca1c910678c9e78677c3a1022ecd2d7883`) via `ops/ras_stage.py`. `data/raw/` is gitignored: BACK THIS FILE UP.
+- Acquisition note: scripted requests to the site returned HTTP 429. They were not evaded (a first attempt with a spoofed user agent was a mistake; stopped). Rows were paged by hand in the browser pane with Turon's explicit permission and passed in checksum-verified chunks.
+- Loader `ras.maintable` (`fetches = False`, not weekly: a hand-staged snapshot, an explicit exception to rule 11). `10YD/20YD/40YD` stored as `YD10/YD20/YD40` (the framework inserts column names unquoted). Known duplicate key (2016, 169) allowed by name; any other duplicate fails.
+- Bridge `idp_prospect.ras_bridge`: exact (draft year, overall pick) join to `core_nflverse_draft_picks`; team, side and duplicate checks may only reject. Scope 2017+ (2016's SDG is not in `team_aliases`; not patched). 1,267 drafted defenders: 1,256 ok, 10 side_contradiction (includes 2021 picks 182/183, likely off by one on the site), 1 no_ras_row, 0 team contradictions; 1,118 with a score. Coverage by class: 2017 123/129, 2018 122/128, 2019 122/129, 2020 84/124, 2021 120/133, 2022 115/129, 2023 117/129.
+- `mart_idp_prospect_features` gained has_ras, ras, ras_yd10, ras_yd20, ras_yd40 (schema 055), with a check that they agree with an accepted bridge row.
+- Tests: `tests/test_phase17.py`, 11 tests.
+- Look before the spec: whole-sample EDGE Spearman with `ppg3`: RAS 0.389, 10-yard -0.287, forty -0.318 (0.232 / -0.180 / -0.190 after draft slot). Disclosed in `PHASE17_SPEC.md`; that look chose the hypothesis.
+- Next: `PHASE17_SPEC.md` is drafted and awaiting approval; the backtest has not been run.

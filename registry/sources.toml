@@ -461,6 +461,13 @@ name = "mart_idp_sack_rates"
 owner = "idp_model.build"
 kind = "builder"
 
+# Phase 17: RAS Main Table, a hand-staged raw file (ops/ras_stage.py; the site has no export). Not weekly: nothing is fetched.
+[[table]]
+name = "core_ras_maintable"
+owner = "ras.maintable"
+source = "ras.football Main Table (Kent Lee Platte's Relative Athletic Score), paged in a browser, drafted defenders 2016-2026"
+grain = "snapshot"
+
 # Phase 15c: NFL outcomes of drafted defenders, years 1-3 (fdb/idp_prospect.py). Exact gsis_id; catch-all points from counts.
 [[table]]
 name = "mart_idp_prospect_outcome"
@@ -475,12 +482,38 @@ owner = "idp_prospect.cfbd_bridge"
 kind = "builder"
 note = "gsis_id <-> CFBD athlete id by (draft season, overall pick); scouting ranks and recruit by exact id; a team contradiction rejects a pair"
 
+# Phase 17: the RAS bridge (fdb/idp_ras.py). Runs BEFORE the features builder (registry order).
+[[table]]
+name = "mart_idp_prospect_ras_bridge"
+owner = "idp_prospect.ras_bridge"
+kind = "builder"
+note = "gsis_id <-> RAS row by (draft year, overall pick) only; a duplicated key, a team contradiction or a front-seven/secondary contradiction rejects a pair"
+
 # Phase 15d: pre-draft features (fdb/idp_prospect.py). College rows by exact PFF id; counts only; NULL stays NULL with indicators.
 [[table]]
 name = "mart_idp_prospect_features"
 owner = "idp_prospect.features"
 kind = "builder"
 note = "draft capital, age, combine, final-college-season PFF counts per drafted defender 2017+; nothing dated after draft year - 1"
+
+# Phase 16b: the next-season outlook of NFL defenders (fdb/idp_outlook.py). Needs the expected-tackle/sack marts (idp_model.build) above.
+[[table]]
+name = "mart_idp_outlook"
+owner = "idp_outlook.build"
+kind = "builder"
+note = "candidate defenders (>= 300 snaps in N, N 2021+, closed seasons): last-season counts, the frozen 16a ridge prediction of next-season league points for DT/S/CB, ranks"
+
+[[table]]
+name = "mart_idp_outlook_model"
+owner = "idp_outlook.build"
+kind = "builder"
+note = "the fitted ridge per (season_n, position group): alpha, intercept, coefficients, medians, means, scales"
+
+[[table]]
+name = "mart_idp_outlook_exit"
+owner = "idp_outlook.build"
+kind = "builder"
+note = "zero-points-next-season counts by age band over the training candidates; the rate is read-time"
 
 # DD Fantasy Football Trinity (fdb/ddff.py; member login in .env). 2021+, REG weeks 1-17: where the site's pickers start/stop.
 [[table]]
