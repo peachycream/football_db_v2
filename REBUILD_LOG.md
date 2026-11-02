@@ -1075,3 +1075,29 @@ Descriptive, uncorrected: the college block (P-C, `c_grade_defense`, snaps per g
 ### Decisions
 - The draft slot already prices the team situation we can see on draft day. Four attempts (college stats, blocks, CFBD scouting and recruiting, team context) have not beaten it; the "playing time from draft-day information" route is closed for these features. No tuning, no re-run.
 - 15f (score the current class) stays off: no model passed. Untested: post-draft information (free-agent and trade moves, veteran depth), the forward year-N to year-N+1 model, Stage 2 (points per snap given a role), the 2016 class.
+
+## Phase 16a - forward model, year N to year N+1 (2026-11-01, Windows)
+Spec `PHASE16A_SPEC.md` committed unchanged (`238ce9d`) BEFORE any number here. Script `ops/phase16a_backtest.py` (`3c616da`), run once, seed 16, read-only; no loader, migration or rebuild. 4,604 candidates (>= 300 snaps in N, N = 2016-2024); 1 player-season without a gsis_id dropped. Test N = 2021-2024, trained on earlier transitions only; player-cluster bootstrap. The position group "DE" in `fdb.idp_prospect.GROUPS` is the EDGE group of the spec (naming only).
+
+### Result: THE PRIMARY TEST PASSES AT DT, S AND CB; IT FAILS AT DE AND LB.
+Spearman vs `points_next` (league points in N+1, 0 if the player has no row); PRIMARY (8 features) minus B0 (rank by last year's points), Holm over five positions:
+| position | candidates (players) | B0 | PRIMARY | lift | 95% CI | p | Holm p | verdict |
+|---|---|---|---|---|---|---|---|---|
+| DE (EDGE) | 436 (188) | 0.520 | 0.552 | +0.031 | [-0.017, +0.078] | 0.196 | 0.392 | do not ship |
+| DT | 439 (189) | 0.470 | 0.555 | +0.085 | [+0.040, +0.129] | 0.001 | 0.003 | passes |
+| LB | 332 (153) | 0.545 | 0.539 | -0.006 | [-0.067, +0.052] | 0.881 | 0.881 | do not ship |
+| S | 374 (166) | 0.432 | 0.499 | +0.067 | [+0.025, +0.111] | 0.002 | 0.006 | passes |
+| CB | 484 (227) | 0.416 | 0.498 | +0.082 | [+0.044, +0.122] | 0.001 | 0.003 | passes |
+
+### Where the lift comes from (descriptive, uncorrected)
+- Age and experience (P-A, features 4-5 added to the three persistence features): DT +0.050, S +0.055, CB +0.076, DE +0.017, LB -0.012. This block carries the lift. The coefficient on age is negative at every position.
+- Expected-minus-actual tackles and sacks (P-E): +0.032 at CB, +0.018 at DT, about 0 elsewhere. Persistence rebuilt as a ridge (P-S) is at or within 0.02 of B0 everywhere, so the lift is not a refit effect.
+- Top-12 / top-24 AUC (PRIMARY vs last year's points): DT 0.826 -> 0.873 and 0.797 -> 0.878, S 0.695 -> 0.736 and 0.695 -> 0.726, CB 0.712 -> 0.710 and 0.710 -> 0.720; DE and LB at or below B0 (LB 0.843 -> 0.818, 0.797 -> 0.763).
+- Survivors only (players with 300+ snaps again in N+1, against `ppg_next`): PRIMARY above B0 at DE, DT, S, CB (DE 0.523 -> 0.598), below at LB (0.551 -> 0.522).
+- Zero points next season rises with age: 31+ has 0.14 (DE), 0.16 (DT), 0.27 (LB), 0.25 (S), 0.42 (CB) against 0.01-0.06 under 25.
+- Coverage: expected-sack gap covers 0.75 of CB test rows (0.98-1.00 elsewhere); draft year 0.80-0.93.
+
+### Decisions
+- Passing means the gate in the spec passed for DT, S and CB, nothing more. No app tile, no mart and no 15f change has been built; that is its own spec. DE and LB stay on last year's points.
+- The lift is mostly an age and experience curve, not the NFL expected-tackle and expected-sack marts. The marts add a little at CB and DT only.
+- Caveats for the next spec: players recur across test years (the bootstrap is by player, p values are exact only for that scheme); the P-A, P-E and survivors tables are uncorrected.
