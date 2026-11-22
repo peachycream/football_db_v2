@@ -1117,3 +1117,10 @@ Data: ras.football Main Table (Kent Lee Platte's RAS), drafted defenders 2016-20
 - Tests: `tests/test_phase17.py`, 11 tests.
 - Look before the spec: whole-sample EDGE Spearman with `ppg3`: RAS 0.389, 10-yard -0.287, forty -0.318 (0.232 / -0.180 / -0.190 after draft slot). Disclosed in `PHASE17_SPEC.md`; that look chose the hypothesis.
 - Next: `PHASE17_SPEC.md` is drafted and awaiting approval; the backtest has not been run.
+
+## Flex-position analysis (2026-11-21, Windows)
+`analysis/flex_position/build.py` writes `flex_position.html` (standalone, Chart.js from cdnjs, league filter, min-games and depth sliders, rank-vs-PPG curves). Read-only: it opens `fdb.db` mode=ro and creates the views of `schema/056_mart_mfl_flex.sql` as TEMP views. Migration 056 applied to fdb.db 2026-11-22 (backup `database/pre_flex056_20261122.db`); the script could now read the views directly.
+- Inputs: MFL `starters` (min-max per position plus side totals: flex slots = side total - sum of minimums; a position can take flex only if max > min) and MFL reported `playerScores` PPG (a game = non-zero score), 2026 REG weeks 1-10.
+- Teams = the player POOL (`playerLimitUnit`) / `rostersPerPlayer`, not franchises: 30590 = 16 (conference), 46276 = 12, 55757 = 22/2 = 11, 57653 = 12, 60398 and 60856 = 10.
+- Flex band = ranks past teams x minimum, depth teams x flex slots x slider, capped at (max-min) x teams; unfilled slots count 0 PPG.
+- Not built: Flask/app page; tests; multi-season window.
