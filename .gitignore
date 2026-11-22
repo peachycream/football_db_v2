@@ -21,3 +21,5 @@ data/logs/
 # Rendered cards and downloaded franchise logos (rebuildable)
 data/cards/
 data/cache/
+# Weekly flex-position dashboard (rebuildable)
+data/flex_position/

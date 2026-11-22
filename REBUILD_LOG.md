@@ -1124,3 +1124,4 @@ Data: ras.football Main Table (Kent Lee Platte's RAS), drafted defenders 2016-20
 - Teams = the player POOL (`playerLimitUnit`) / `rostersPerPlayer`, not franchises: 30590 = 16 (conference), 46276 = 12, 55757 = 22/2 = 11, 57653 = 12, 60398 and 60856 = 10.
 - Flex band = ranks past teams x minimum, depth teams x flex slots x slider, capped at (max-min) x teams; unfilled slots count 0 PPG.
 - Not built: Flask/app page; tests; multi-season window.
+- 2026-11-22: builder moved to `fdb/flex_report.py` (reads the 056 views through the DB connection, writes `data/flex_position/flex_position.html`, gitignored). `fdb weekly` rebuilds it after the builders and before reconcile; a failure is a note, never a failed run. `analysis/flex_position/build.py` is a thin wrapper for by-hand runs. Tests: `tests/test_flex_report.py` (2); full suite 578 OK.

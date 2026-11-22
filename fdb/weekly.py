@@ -132,6 +132,13 @@ def run() -> int:
     except Exception as e:
         notes.append(f"Matchup of the Week choices were not written: {type(e).__name__}: {e}")
 
+    try:   # the flex-position dashboard (data/flex_position/flex_position.html), rebuilt from the freshly loaded scores; a failure is only a note
+        from . import flex_report
+        path, leagues = flex_report.write(conn)
+        notes.append(f"Flex-position dashboard refreshed: {path} ({len(leagues)} leagues, through week {max(l['through_week'] for l in leagues)})")
+    except Exception as e:
+        notes.append(f"Flex-position dashboard was not refreshed: {type(e).__name__}: {e}")
+
     season = schedule.current_season(conn)
     if season:  # cross-source agreement on the live season: a silently wrong load shows up here
         from . import reconcile
