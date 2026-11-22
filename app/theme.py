@@ -92,6 +92,7 @@ APP_ACCENT = {
     "/viz/draft-grades": "app-league",
     "/draft/":       "app-league",
     "/matchups/":    "app-league",
+    "/idp/":         "app-league",
 
     "/projections/": "app-model",
     "/aethersight/": "app-model",

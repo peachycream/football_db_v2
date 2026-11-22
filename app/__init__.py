@@ -25,6 +25,8 @@ def create_app() -> Flask:
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(matchup_card_bp)
     app.register_blueprint(devy_bp)
+    from .idp_start import bp as idp_start_bp
+    app.register_blueprint(idp_start_bp)
     from .shell import hub_html
     app.add_url_rule("/", "home", hub_html)
     return app
