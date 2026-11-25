@@ -7,7 +7,7 @@ from . import theme
 
 NAV_LINKS = [("/ownership/", "OWNERSHIP"), ("/viz/player", "PLAYER"), ("/viz/offense", "TEAM OFFENSE"),
              ("/viz/defense", "TEAM DEFENSE"), ("/matchups/", "MATCHUPS"), ("/matchup/", "MATCHUP CARD"), ("/devy/", "DEVY"),
-             ("/idp/", "IDP START")]
+             ("/idp/", "IDP START"), ("/defense/", "DEFENSE MAP")]
 
 # The hub at "/" (v1's landing page; the React pages' "Hub" link points here). Only ported apps.
 HUB_APPS = [
@@ -19,6 +19,7 @@ HUB_APPS = [
     ("/matchup/", "Matchup Card", "Review the weekly Matchup of the Week card before anything is posted"),
     ("/devy/", "Devy Tracker", "Your devy players and the best unrostered college players, with CFB stats, size and draft class"),
     ("/idp/", "IDP Start/Sit", "Who to start each week: snap-share trend, points by category under each league's MFL rules, stable vs big-play scoring"),
+    ("/defense/", "Defense Map", "Heat map of where each defense allows targets, completions and air yards, by lane and depth, vs the league"),
 ]
 
 
