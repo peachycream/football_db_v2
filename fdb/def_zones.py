@@ -36,7 +36,8 @@ def _weeks(conn, season):
 
 
 def _rows(conn, season, weeks, pos):
-    sql = ("SELECT defteam, week, lane, air_yards, complete, yards, rec_td, route, name, position, gsis_id "
+    sql = ("SELECT defteam, week, lane, air_yards, complete, yards, rec_td, route, name, position, gsis_id, "
+           "defender_id, defender_name, defender_pos "
            "FROM mart_def_target_play WHERE season = ? AND week BETWEEN ? AND ? AND position IN ({})")
     ps = ("WR", "TE", "RB") if pos == "ALL" else (pos,)
     sql = sql.format(",".join("?" * len(ps)))
@@ -92,14 +93,19 @@ def _rank(vals: dict, team: str, higher_is_more: bool = True):
     return rank, n, round(100.0 * (n - rank) / (n - 1), 0) if n > 1 else 50.0
 
 
-def build(conn, team: str, pos: str = "ALL", last_n: int | None = None) -> dict:
+def build(conn, team: str, pos: str = "ALL", last_n: int | None = None, week: int | None = None) -> dict:
     season = _season(conn)
     if season is None:
         return {"error": "mart_def_target_play is empty"}
     all_weeks = _weeks(conn, season)
     if not all_weeks:
         return {"error": f"no dropback weeks for {season}"}
-    weeks = all_weeks[-last_n:] if last_n else all_weeks
+    if week is not None:
+        if week not in all_weeks:
+            return {"error": f"no data for week {week}", "all_weeks": all_weeks}
+        weeks = [week]
+    else:
+        weeks = all_weeks[-last_n:] if last_n else all_weeks
     pos = pos if pos in POSITIONS else "ALL"
     rows = _rows(conn, season, weeks, pos)
     agg = _agg(rows)
@@ -167,12 +173,27 @@ def build(conn, team: str, pos: str = "ALL", last_n: int | None = None) -> dict:
                       "to " + ("WR + TE + RB" if pos == "ALL" else pos))
 
     dots = [{"lane": r["lane"], "ay": r["air_yards"], "c": r["complete"], "td": r["rec_td"], "yd": r["yards"] or 0,
-             "route": r["route"], "name": r["name"], "week": r["week"], "pos": r["position"], "id": r["gsis_id"]}
+             "route": r["route"], "name": r["name"], "week": r["week"], "pos": r["position"], "id": r["gsis_id"],
+             "did": r["defender_id"], "dn": r["defender_name"], "dp": r["defender_pos"]}
             for r in rows if r["defteam"] == team]
+
+    # Who was covering the targeted receiver (FTN's charted defender), by exact id; a defender without a name keeps his id.
+    dm = {}
+    for d in dots:
+        if not d["did"]:
+            continue
+        x = dm.setdefault(d["did"], {"id": d["did"], "name": d["dn"], "pos": d["dp"], "t": 0, "c": 0, "yd": 0, "ay": 0, "td": 0})
+        x["t"] += 1
+        x["c"] += d["c"]
+        x["yd"] += d["yd"] if d["c"] else 0
+        x["ay"] += d["ay"]
+        x["td"] += d["td"]
+        x["name"] = x["name"] or d["dn"]
+    defenders = sorted(dm.values(), key=lambda x: (-x["t"], x["name"] or ""))
 
     return {
         "season": season, "team": team, "pos": pos, "weeks": [weeks[0], weeks[-1]], "all_weeks": all_weeks,
-        "games": g_me, "teams": teams, "bands": [b[2] for b in BANDS], "cells": cells, "dots": dots,
+        "games": g_me, "teams": teams, "defenders": defenders, "no_defender": sum(1 for d in dots if not d["did"]), "bands": [b[2] for b in BANDS], "cells": cells, "dots": dots,
         "targets": me["t"], "completions": me["c"],
         "league_games": lg_g, "pts": pts_strip, "strips": strips,
         "td_allowed": sum(c["td"] for row in me["cells"] for c in row),

@@ -32,14 +32,14 @@ def _mtime():
         return 0
 
 
-def payload(team, pos, last_n):
-    key = (team, pos, last_n, _mtime())
+def payload(team, pos, last_n, week=None):
+    key = (team, pos, last_n, week, _mtime())
     with _lock:
         if key in _cache:
             return _cache[key]
     conn = _db()
     try:
-        data = def_zones.build(conn, team, pos, last_n)
+        data = def_zones.build(conn, team, pos, last_n, week)
     finally:
         conn.close()
     with _lock:
@@ -56,10 +56,13 @@ def api_data():
     last_n = request.args.get("last", type=int)
     if pos not in def_zones.POSITIONS:
         abort(400)
+    week = request.args.get("week", type=int)
     if last_n is not None and not 1 <= last_n <= 30:
         abort(400)
+    if week is not None and not 1 <= week <= 30:
+        abort(400)
     try:
-        data = payload(team, pos, last_n)
+        data = payload(team, pos, last_n, week)
     except Exception as e:      # a missing view (migration 058 not applied) must say so, not 500 blank
         return Response(json.dumps({"error": f"{type(e).__name__}: {e}"}), status=500, mimetype="application/json")
     if data.get("error"):
@@ -116,6 +119,12 @@ PAGE = r"""
 .dz .sp .tr .dt{position:absolute;top:-4px;width:14px;height:14px;border-radius:50%;margin-left:-7px;border:2px solid var(--surf-1)}
 .dz .pill{display:inline-block;border:1px solid var(--edge);border-radius:999px;padding:3px 12px;font-size:.74rem;background:var(--surf-2)}
 .dz .note{color:var(--tx-mut);font-size:.75rem;line-height:1.5}
+.dz table.dt{width:100%;border-collapse:collapse;font-size:.82rem}
+.dz .dt th{text-align:right;padding:7px 8px;font-size:.66rem;text-transform:uppercase;letter-spacing:.6px;color:var(--tx-mut);background:var(--surf-2);white-space:nowrap}
+.dz .dt th:first-child,.dz .dt td:first-child{text-align:left}
+.dz .dt td{text-align:right;padding:6px 8px;border-bottom:1px solid var(--edge-soft);white-space:nowrap}
+.dz .dt tr.pl{cursor:pointer}.dz .dt tr.pl:hover td{background:var(--surf-2)}.dz .dt tr.sel td{background:rgb(var(--accent-rgb)/.14)}
+.dz .dt .ps{display:inline-block;min-width:34px;text-align:center;border-radius:6px;padding:1px 6px;font-size:.68rem;font-weight:800;background:var(--surf-3);color:var(--tx-mut);margin-left:8px}
 .dz .err{color:var(--bad);font-weight:700}
 </style>
 <div class="dz">
@@ -143,13 +152,16 @@ PAGE = r"""
     <div class="stage"><canvas id="cv" width="1000" height="590"></canvas><div class="tip" id="tip"></div></div>
     <p class="note" style="margin-top:10px" id="foot"></p>
   </div>
+  <div class="card" id="defs" style="display:none"><h4 style="font-size:.85rem;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Who was targeted: defender in coverage</h4>
+  <p class="note" style="margin-bottom:10px">FTN's charted defender on the targeted receiver. Click a defender to isolate his targets on the map; click again to clear. Same position and window filters as the map.</p>
+  <div style="overflow-x:auto"><table class="dt" id="dtab"></table></div></div>
   <div class="card" id="strips" style="display:none"><div class="strips" id="sp"></div></div>
 </div>
 <script>
 const BOOT = __BOOT__;
 const METRICS = [["targets","Targets"],["completions","Completions"],["comp_pct","Completion %"],["air_yards","Air yards"]];
 const POS = ["ALL","WR","TE","RB"];
-const S = {team: BOOT.default, pos: "ALL", last: "", metric: "targets", dots: true, routes: false, td: true, data: null};
+const S = {team: BOOT.default, pos: "ALL", last: "", week: "", metric: "targets", dots: true, routes: false, td: true, names: false, sel: null, data: null};
 const $ = id => document.getElementById(id);
 const FW = 880, FH = 470, OX = 60, OY = 40, TOPW = 0.8;        // flat heat canvas, then perspective-projected
 const Y0 = -8, Y1 = 50;                                         // yards shown: behind LOS to +50
@@ -225,11 +237,22 @@ function draw(){
       ctx.stroke();
     }
   }
+  const on = d => !S.sel || d.did === S.sel;
   for (const {d,x,y} of dots){
     const [px,py] = proj(x,y); LAST.push({d,px,py});
     if (S.dots){
+      ctx.globalAlpha = on(d) ? 1 : 0.12;
       ctx.fillStyle = d.c ? "#5ad278" : "#eef0fa"; ctx.strokeStyle = "rgba(10,14,26,.7)"; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.arc(px,py,d.c?3.6:3,0,7); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(px,py,on(d) ? (d.c?4.4:3.8) : (d.c?3.6:3),0,7); ctx.fill(); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  }
+  if (S.names){   // covering defender's surname + position beside each target (all, or the selected defender's)
+    ctx.font = "600 10px system-ui,sans-serif"; ctx.textAlign = "left"; ctx.lineWidth = 3; ctx.strokeStyle = "rgba(10,14,26,.85)";
+    for (const {d} of dots){
+      if (!d.did || !on(d)) continue;
+      const h = LAST.find(q=>q.d===d), t = `${surname(d.dn)} ${d.dp||""}`.trim();
+      ctx.fillStyle = "#cfe0ff"; ctx.strokeText(t, h.px+6, h.py+3); ctx.fillText(t, h.px+6, h.py+3);
     }
   }
   if (S.td) for (const {d,x,y} of dots){ if(!d.td) continue;
@@ -266,14 +289,17 @@ function routePath(d, ex, ay){
   }
 }
 
+const surname = n => n ? n.trim().split(/\s+/).slice(1).join(" ") || n : "?";
 const f1 = v => v.toFixed(1), pct = v => (v*100).toFixed(1)+"%", f3 = v => v.toFixed(3);
 const FMT = {pct1: pct, num1: f1, num3: f3};
 const ord = n => n + ([,"st","nd","rd"][(n%100>>3^1)&&n%10]||"th");
 
 function render(){
-  const D = S.data; $("card").style.display = $("strips").style.display = "";
+  const D = S.data; $("card").style.display = $("strips").style.display = $("defs").style.display = "";
   $("tmn").textContent = D.team;
-  $("tms").textContent = `${D.games} games · weeks ${D.weeks[0]}–${D.weeks[1]} · ${D.season}`;
+  $("tms").textContent = `${D.games} ${D.games===1?"game":"games"} · ${D.weeks[0]===D.weeks[1] ? "week "+D.weeks[0] : "weeks "+D.weeks[0]+"–"+D.weeks[1]} · ${D.season}`;
+  if (S.sel && !D.defenders.some(x=>x.id===S.sel)) S.sel = null;
+  defTable(D);
   const p = D.pts;
   $("ppg").textContent = f1(p.value); $("ppgr").textContent = `${ord(p.rank)} most of ${p.of} · lg avg ${f1(p.league)}`;
   $("tg").textContent = D.targets; $("tgs").textContent = `${D.completions} caught · ${(D.completions/Math.max(1,D.targets)*100).toFixed(1)}%`;
@@ -294,11 +320,25 @@ function render(){
   draw();
 }
 
+function defTable(D){
+  const rows = D.defenders.map(x=>`<tr class="pl${S.sel===x.id?" sel":""}" data-id="${x.id}"><td><b>${x.name||x.id}</b><span class="ps">${x.pos||""}</span></td>
+    <td>${x.t}</td><td>${x.c}</td><td>${(x.c/x.t*100).toFixed(0)}%</td><td>${x.yd}</td><td>${(x.ay/x.t).toFixed(1)}</td><td>${x.td||""}</td></tr>`).join("");
+  $("dtab").innerHTML = `<tr><th>Defender</th><th>Targets</th><th>Caught</th><th>Comp %</th><th>Yards</th><th>Avg air yds</th><th>TD</th></tr>${rows}`;
+  $("dtab").querySelectorAll("tr.pl").forEach(tr=>tr.onclick=()=>{ S.sel = S.sel===tr.dataset.id ? null : tr.dataset.id; defTable(D); draw(); });
+  if (D.no_defender) $("dtab").insertAdjacentHTML("beforeend", `<tr><td colspan="7" style="text-align:left;color:var(--tx-dim)">${D.no_defender} targets with no charted defender are not in this table.</td></tr>`);
+}
+function winOptions(){
+  const w = $("win"), D = S.data; if (!D || w.dataset.n == D.all_weeks.length) return;
+  w.innerHTML = ""; w.dataset.n = D.all_weeks.length;
+  const add = (v,l)=>{ const o = document.createElement("option"); o.value = v; o.textContent = l; w.appendChild(o); };
+  add("","All weeks"); [4,6,8].forEach(n=>add("last"+n,"Last "+n+" weeks")); D.all_weeks.forEach(k=>add("wk"+k,"Week "+k));
+  w.value = S.week ? "wk"+S.week : S.last ? "last"+S.last : "";
+}
 async function load(){
-  const q = new URLSearchParams({team: S.team, pos: S.pos}); if (S.last) q.set("last", S.last);
+  const q = new URLSearchParams({team: S.team, pos: S.pos}); if (S.last) q.set("last", S.last); if (S.week) q.set("week", S.week);
   const r = await fetch("/api/defense/data?" + q), j = await r.json();
   if (j.error){ $("err").textContent = j.error; return; }
-  $("err").textContent = ""; S.data = j; render();
+  $("err").textContent = ""; S.data = j; winOptions(); render();
 }
 function chips(el, items, get, set){
   el.innerHTML = "";
@@ -309,11 +349,11 @@ function init(){
   if (BOOT.error){ $("err").textContent = BOOT.error; return; }
   const t = $("team"); BOOT.teams.forEach(x=>{ const o = document.createElement("option"); o.value = o.textContent = x; t.appendChild(o); });
   t.value = S.team; t.onchange = ()=>{ S.team = t.value; load(); };
-  const w = $("win"); [["","Season to date"],["4","Last 4 weeks"],["6","Last 6 weeks"],["8","Last 8 weeks"]].forEach(([v,l])=>{ const o = document.createElement("option"); o.value = v; o.textContent = l; w.appendChild(o); });
-  w.onchange = ()=>{ S.last = w.value; load(); };
+  const w = $("win"); w.innerHTML = '<option value="">All weeks</option>';
+  w.onchange = ()=>{ const v = w.value; S.last = v.startsWith("last") ? v.slice(4) : ""; S.week = v.startsWith("wk") ? v.slice(2) : ""; load(); };
   chips($("pos"), POS.map(p=>[p, p==="ALL" ? "All (WR/TE/RB)" : p]), k=>S.pos===k, k=>{ S.pos = k; load(); });
   chips($("met"), METRICS, k=>S.metric===k, k=>{ S.metric = k; draw(); });
-  const OVS = [["dots","Targets"],["routes","Route lines"],["td","TDs"]];
+  const OVS = [["dots","Targets"],["routes","Route lines"],["td","TDs"],["names","Defender names"]];
   chips($("ov"), OVS, k=>S[k], k=>{ S[k] = !S[k]; chips($("ov"), OVS, kk=>S[kk], kk=>{ S[kk] = !S[kk]; draw(); }); draw(); });
   const cv = $("cv"), tip = $("tip");
   cv.onmousemove = ev => {
@@ -321,7 +361,7 @@ function init(){
     let best = null, bd = 100; for (const h of (LAST||[])){ const dd = (h.px-x)**2 + (h.py-y)**2; if (dd < bd){ bd = dd; best = h; } }
     if (!best){ tip.style.display = "none"; return; }
     const d = best.d; tip.style.display = "block";
-    tip.innerHTML = `<b>${d.name||"Unknown"}</b> · ${d.pos||""} · wk ${d.week}<br>${d.route||"route not charted"}<br>${d.ay} air yds · ${d.c ? "caught for "+d.yd+(d.td?" · TD":"") : "incomplete"}`;
+    tip.innerHTML = `<b>${d.name||"Unknown"}</b> (target) · ${d.pos||""} · wk ${d.week}<br>${d.route||"route not charted"}<br>${d.did ? "covered by <b>"+(d.dn||d.did)+"</b> "+(d.dp||"") : "no defender charted"}<br>${d.ay} air yds · ${d.c ? "caught for "+d.yd+(d.td?" · TD":"") : "incomplete"}`;
     tip.style.left = (ev.clientX - r.left + 14) + "px"; tip.style.top = (ev.clientY - r.top + 10) + "px";
   };
   cv.onmouseleave = ()=>{ tip.style.display = "none"; };

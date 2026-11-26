@@ -16,15 +16,17 @@ def _view_conn():
     INSERT INTO team_aliases VALUES ('BLT','BAL',1999,9999,NULL),('SEA','SEA',1999,9999,NULL),('NE','NE',1999,9999,NULL);
     CREATE TABLE core_ftn_plays (season INT, season_type TEXT, week INT, pid INT, type TEXT, "off" TEXT, "def" TEXT,
         loc TEXT, trg TEXT, dot INT, comp INT, yds INT, td INT, td_type TEXT);
-    CREATE TABLE core_ftn_participation (pid INT, skp1 TEXT, route1 TEXT, skp2 TEXT, route2 TEXT, skp3 TEXT, route3 TEXT,
-        skp4 TEXT, route4 TEXT, skp5 TEXT, route5 TEXT);
+    CREATE TABLE core_ftn_participation (pid INT, skp1 TEXT, route1 TEXT, def1 TEXT, def1_pos TEXT,
+        skp2 TEXT, route2 TEXT, def2 TEXT, def2_pos TEXT, skp3 TEXT, route3 TEXT, def3 TEXT, def3_pos TEXT,
+        skp4 TEXT, route4 TEXT, def4 TEXT, def4_pos TEXT, skp5 TEXT, route5 TEXT, def5 TEXT, def5_pos TEXT);
     CREATE TABLE mart_player_week (season INT, season_type TEXT, week INT, gsis_id TEXT, position TEXT);
     CREATE TABLE core_player_stats (season INT, season_type TEXT, week INT, player_id TEXT, player_display_name TEXT);
     CREATE TABLE core_pbp (season INT, season_type TEXT, week INT, defteam TEXT, qb_dropback INT, epa REAL);
     """)
-    sql = (config.SCHEMA_DIR / "058_mart_def_zones.sql").read_text()
-    for stmt in fdb_db._split_sql(sql):
-        c.execute(stmt)
+    c.executescript("CREATE TABLE players (gsis_id TEXT PRIMARY KEY, display_name TEXT);")
+    for f in ("058_mart_def_zones.sql", "059_mart_def_zones_defender.sql"):
+        for stmt in fdb_db._split_sql((config.SCHEMA_DIR / f).read_text()):
+            c.execute(stmt)
     return c
 
 
@@ -48,7 +50,10 @@ class Views(unittest.TestCase):
         _play(c, 5, type="RUSH")                                      # not a pass: out
         _play(c, 6, season_type="POST")                               # not REG: out
         _play(c, 7, td=1, td_type="INT")                              # pick-six is not a receiving TD
-        c.execute("INSERT INTO core_ftn_participation VALUES (1,'zz','9 - Go','p1','3 - Hitch/Curl',NULL,NULL,NULL,NULL,NULL,NULL)")
+        c.execute("INSERT INTO players VALUES ('d1','Dee Fender')")
+        c.execute("INSERT INTO core_ftn_participation VALUES (1,'zz','9 - Go','dz','CB','p1','3 - Hitch/Curl','d1','SCB',"
+                  "NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL)")
+        _play(c, 8, season=2025)                                      # before 2026: out
 
     def test_filters_and_names(self):
         rows = self.c.execute("SELECT pid, defteam, offteam, position, lane, depth_tier, rec_td, route, name "
@@ -58,6 +63,11 @@ class Views(unittest.TestCase):
         self.assertEqual((rows[0]["position"], rows[0]["lane"], rows[0]["depth_tier"]), ("RB", "M", "S"))
         self.assertEqual(rows[0]["route"], "3 - Hitch/Curl")           # the targeted player's slot, not slot 1
         self.assertEqual(rows[0]["name"], "Pat One")
+        # the defender on the TARGETED player's slot (d1 SCB), not slot 1's (dz CB)
+        r0 = self.c.execute("SELECT defender_id, defender_name, defender_pos FROM mart_def_target_play WHERE pid = 1").fetchone()
+        self.assertEqual(tuple(r0), ("d1", "Dee Fender", "SCB"))
+        r1 = self.c.execute("SELECT defender_id FROM mart_def_target_play WHERE pid = 2").fetchone()
+        self.assertIsNone(r1[0])                                      # no participation row: target kept, no defender
         self.assertEqual((rows[1]["rec_td"], rows[1]["depth_tier"], rows[1]["route"]), (1, "D", None))
         self.assertEqual(rows[2]["rec_td"], 0)
 
@@ -68,11 +78,13 @@ def _mart(rows, weeks):
     c.row_factory = sqlite3.Row
     c.executescript("""
     CREATE TABLE mart_def_target_play (season INT, week INT, defteam TEXT, lane TEXT, air_yards INT, complete INT,
-        yards INT, rec_td INT, route TEXT, name TEXT, position TEXT, gsis_id TEXT);
+        yards INT, rec_td INT, route TEXT, name TEXT, position TEXT, gsis_id TEXT, defender_id TEXT, defender_name TEXT,
+        defender_pos TEXT);
     CREATE TABLE mart_def_dropback_week (season INT, season_type TEXT, week INT, defteam TEXT, dropbacks INT, epa REAL);""")
     for i, (tm, wk, lane, ay, comp, yds, td, pos) in enumerate(rows):
-        c.execute("INSERT INTO mart_def_target_play VALUES (2026,?,?,?,?,?,?,?,NULL,?,?,?)",
-                  (wk, tm, lane, ay, comp, yds, td, f"n{i}", pos, f"g{i}"))
+        c.execute("INSERT INTO mart_def_target_play VALUES (2026,?,?,?,?,?,?,?,NULL,?,?,?,?,?,?)",
+                  (wk, tm, lane, ay, comp, yds, td, f"n{i}", pos, f"g{i}",
+                   None if i == 0 else "dA" if i % 2 else "dB", None if i == 0 else "Ann" if i % 2 else "Bob", "CB"))
     for tm in ("AAA", "BBB", "CCC"):
         for wk in weeks:
             c.execute("INSERT INTO mart_def_dropback_week VALUES (2026,'REG',?,?,35,?)", (wk, tm, 1.0 if tm == "AAA" else -1.0))
@@ -133,6 +145,21 @@ class Build(unittest.TestCase):
         epa = next(s for s in d["strips"] if s["key"] == "epa")
         self.assertAlmostEqual(epa["value"], 2.0 / 70)                       # epa SUM over dropbacks, 2 weeks x 35
         self.assertEqual(epa["rank"], 1)
+
+    def test_single_week_and_unknown_week(self):
+        d = Z.build(self.c, "AAA", "ALL", None, 1)
+        self.assertEqual((d["weeks"], d["games"], d["targets"]), ([1, 1], 1, 2))
+        self.assertIn("error", Z.build(self.c, "AAA", "ALL", None, 9))
+        self.assertEqual(d["all_weeks"], [1, 2])                       # the page lists every week from this
+
+    def test_defender_table_counts_and_unassigned(self):
+        d = Z.build(self.c, "AAA", "ALL")
+        # AAA rows are i = 0 (no defender), 1 (dA), 2 (dB): 3 targets
+        self.assertEqual(d["no_defender"], 1)
+        by = {x["id"]: x for x in d["defenders"]}
+        self.assertEqual((by["dA"]["t"], by["dA"]["c"], by["dA"]["yd"]), (1, 1, 10))
+        self.assertEqual((by["dB"]["t"], by["dB"]["c"], by["dB"]["yd"]), (1, 0, 0))     # yards only on catches
+        self.assertEqual(sum(x["t"] for x in d["defenders"]) + d["no_defender"], d["targets"])
 
     def test_unknown_team(self):
         self.assertIn("error", Z.build(self.c, "ZZZ", "ALL"))
